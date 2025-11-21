@@ -166,24 +166,35 @@ class MotionPrimitiveExecutor:
 
     def close_gripper(self) -> None:
         print("[motion] Closing gripper...")
-        self._interpolate_gripper(self.config.gripper_closed_width)
-        self.gripper_holding = True
         
-        # Brief hold - removed monitoring printouts
-        q_closed = self.robot.get_qpos()
-        if hasattr(q_closed, "cpu"):
-            q_closed = q_closed.cpu().numpy().copy()
+        # Get current position BEFORE closing
+        current_q = self.robot.get_qpos()
+        if hasattr(current_q, "cpu"):
+            target_q = current_q.cpu().numpy().copy()
         else:
-            q_closed = np.array(q_closed, dtype=float, copy=True)
+            target_q = np.array(current_q, dtype=float, copy=True)
         
-        q_closed[-2:] = self.config.gripper_closed_width
-        
-        for i in range(50):  # Reduced from 100 to 50
-            self.robot.control_dofs_position(q_closed)
+        # Close gripper while HOLDING arm position
+        for i in range(self.config.gripper_steps):
+            alpha = (i + 1) / float(self.config.gripper_steps)
+            gripper_width = (1 - alpha) * self.config.gripper_open_width + alpha * self.config.gripper_closed_width
+            
+            # Command arm joints to STAY at original position
+            target_q[-2:] = gripper_width
+            self.robot.control_dofs_position(target_q)
             self.scene.step()
         
-        self.target_qpos = q_closed
+        self.gripper_holding = True
+        
+        # Strong hold after closing
+        target_q[-2:] = self.config.gripper_closed_width
+        for _ in range(50):
+            self.robot.control_dofs_position(target_q)
+            self.scene.step()
+        
+        self.target_qpos = target_q
         print("[motion] ✅ Gripper closed")
+
 
     def pick_up(self, block_id: Any) -> bool:
         key = self._resolve_block_key(block_id)
@@ -232,23 +243,16 @@ class MotionPrimitiveExecutor:
         print("[motion] ✅ PICK-UP SUCCESS")
         return True
 
-    def put_down(self, x: float = None, y: float = None) -> bool:
+    def put_down(self, x: float = 0.50, y: float = 0.0) -> bool:
         """Place held block on table at position (x, y).
         
-        If x, y not provided, places at current x, y below gripper.
+        Default: (0.50, 0.0) - centered below robot for stability
         """
         if not self.gripper_holding:
             print("[motion] ❌ Not holding any block!")
             return False
         
-        print(f"\n[motion] PUT-DOWN at ({x}, {y})")
-        
-        # If position not specified, use current x, y
-        if x is None or y is None:
-            hand = self.robot.get_link("hand")
-            hand_pos = np.array(hand.get_pos())
-            x = hand_pos[0] if x is None else x
-            y = hand_pos[1] if y is None else y
+        print(f"\n[motion] PUT-DOWN at ({x:.2f}, {y:.2f})")
         
         # Find held block
         hand = self.robot.get_link("hand")
