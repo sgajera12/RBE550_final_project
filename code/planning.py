@@ -56,7 +56,7 @@ class PlannerInterface:
             self,
             qpos_goal,
             qpos_start=None,
-            timeout=10.0,
+            timeout=5.0,
             smooth_path=True,
             num_waypoints=100,
             attached_object=None,
@@ -95,7 +95,8 @@ class PlannerInterface:
             from ompl import base as ob
             from ompl import geometric as og
             from ompl import util as ou
-
+            
+            
             ou.setLogLevel(ou.LOG_ERROR)
         except:
             gs.raise_exception(
