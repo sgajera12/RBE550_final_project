@@ -232,6 +232,94 @@ class MotionPrimitiveExecutor:
         print("[motion] ✅ PICK-UP SUCCESS")
         return True
 
+    def put_down(self, x: float = None, y: float = None) -> bool:
+        """Place held block on table at position (x, y).
+        
+        If x, y not provided, places at current x, y below gripper.
+        """
+        if not self.gripper_holding:
+            print("[motion] ❌ Not holding any block!")
+            return False
+        
+        print(f"\n[motion] PUT-DOWN at ({x}, {y})")
+        
+        # If position not specified, use current x, y
+        if x is None or y is None:
+            hand = self.robot.get_link("hand")
+            hand_pos = np.array(hand.get_pos())
+            x = hand_pos[0] if x is None else x
+            y = hand_pos[1] if y is None else y
+        
+        # Find held block
+        hand = self.robot.get_link("hand")
+        hand_pos = np.array(hand.get_pos())
+        held_block = None
+        
+        for key, block in self.blocks_state.items():
+            block_pos = np.array(block.get_pos())
+            dist = np.linalg.norm(block_pos - hand_pos)
+            if dist < 0.15:
+                held_block = block
+                break
+        
+        # Calculate placement position
+        place_center = np.array([x, y, TABLE_BLOCK_CENTER_Z])
+        place_gripper = place_center.copy()
+        place_gripper[2] = TABLE_BLOCK_CENTER_Z + self.config.grasp_offset
+        
+        # Approach position (above placement)
+        approach_pos = place_gripper.copy()
+        approach_pos[2] += 0.15
+        
+        # Move to approach
+        q_approach = self._ik_for_pose(approach_pos, self.grasp_quat)
+        if q_approach is None or not self._plan_and_execute(q_approach, attached_object=held_block):
+            return False
+        
+        # Descend to placement
+        current_q = self.robot.get_qpos()
+        if hasattr(current_q, "cpu"):
+            start_q = current_q.cpu().numpy().copy()
+        else:
+            start_q = np.array(current_q, dtype=float, copy=True)
+        
+        q_place = self._ik_for_pose(place_gripper, self.grasp_quat)
+        if q_place is None:
+            return False
+        
+        # Slow descent
+        for i in range(40):
+            alpha = (i + 1) / 40.0
+            q = (1 - alpha) * start_q + alpha * q_place
+            q[-2:] = self.config.gripper_closed_width
+            self.robot.control_dofs_position(q)
+            self.scene.step()
+        
+        # Release
+        self.open_gripper()
+        
+        # Lift up
+        current_pos = np.array(hand.get_pos())
+        up_pos = current_pos.copy()
+        up_pos[2] += 0.10
+        
+        q_up = self._ik_for_pose(up_pos, self.grasp_quat)
+        if q_up is not None:
+            current_q = self.robot.get_qpos()
+            if hasattr(current_q, "cpu"):
+                start_q = current_q.cpu().numpy().copy()
+            else:
+                start_q = np.array(current_q, dtype=float, copy=True)
+            
+            for i in range(30):
+                alpha = (i + 1) / 30.0
+                q = (1 - alpha) * start_q + alpha * q_up
+                self.robot.control_dofs_position(q)
+                self.scene.step()
+        
+        print("[motion] ✅ PUT-DOWN SUCCESS")
+        return True
+
     def stack_on(self, target_block_id: Any) -> bool:
         if not self.gripper_holding:
             print("[motion] ❌ Not holding!")
