@@ -53,6 +53,7 @@ class MotionPrimitiveExecutor:
         
         # Track target position to prevent drift
         self.target_qpos = None
+        self.tower_centers = {}
 
     def _resolve_block_key(self, block_id: Any) -> str:
         s = str(block_id).strip().lower()
@@ -97,7 +98,7 @@ class MotionPrimitiveExecutor:
                 q_goal = q_goal_perturbed
         
         if not path:
-            print("[motion] ❌ Planning failed after retries")
+            print("[motion]Planning failed after retries")
             return False
 
         print(f"[motion] Executing...")
@@ -162,7 +163,7 @@ class MotionPrimitiveExecutor:
         print("[motion] Opening gripper...")
         self.gripper_holding = False
         self._interpolate_gripper(self.config.gripper_open_width)
-        print("[motion] ✅ Gripper opened")
+        print("[motion] Gripper opened")
 
     def close_gripper(self) -> None:
         print("[motion] Closing gripper...")
@@ -193,7 +194,7 @@ class MotionPrimitiveExecutor:
             self.scene.step()
         
         self.target_qpos = target_q
-        print("[motion] ✅ Gripper closed")
+        print("[motion]Gripper closed")
 
 
     def pick_up(self, block_id: Any) -> bool:
@@ -240,7 +241,7 @@ class MotionPrimitiveExecutor:
             self.robot.control_dofs_position(q_interp)
             self.scene.step()
 
-        print("[motion] ✅ PICK-UP SUCCESS")
+        print("[motion] PICK-UP SUCCESS")
         return True
 
     def put_down(self, x: float = 0.50, y: float = 0.0) -> bool:
@@ -249,7 +250,7 @@ class MotionPrimitiveExecutor:
         Default: (0.50, 0.0) - centered below robot for stability
         """
         if not self.gripper_holding:
-            print("[motion] ❌ Not holding any block!")
+            print("[motion] Not holding any block!")
             return False
         
         print(f"\n[motion] PUT-DOWN at ({x:.2f}, {y:.2f})")
@@ -321,18 +322,20 @@ class MotionPrimitiveExecutor:
                 self.robot.control_dofs_position(q)
                 self.scene.step()
         
-        print("[motion] ✅ PUT-DOWN SUCCESS")
+        print("[motion] PUT-DOWN SUCCESS")
         return True
 
-    def stack_on(self, target_block_id: Any) -> bool:
-        if not self.gripper_holding:
-            print("[motion] ❌ Not holding!")
+    def stack_on(self, target_block_id: Any,predicates=None) -> bool:
+        """
+            Stack current block on top of target_id block.
+            Uses per-tower XY: each base block gets its own fixed tower center.
+        """
+        if predicates is None:
+            print("stack_on requires predicates")
             return False
         
-        target_key = self._resolve_block_key(target_block_id)
-        target_center = self._block_center(target_key)
-        
-        print(f"\n[motion] STACK on '{target_key}'")
+        # 1. Determine base block for THIS target's tower
+        base = self._find_base_block(target_block_id, predicates)
         
         # Find held block
         hand = self.robot.get_link("hand")
@@ -346,23 +349,37 @@ class MotionPrimitiveExecutor:
                 held_block = block
                 break
         
-        # Get FRESH target position
-        target_center = self._block_center(target_key)
+        # 2. If this base has no stored XY → detect and store
+        if base not in self.tower_centers:
+            center = self._block_center(base)
+            self.tower_centers[base] = (center[0], center[1])
+            print(f"New tower base: {base}, center={self.tower_centers[base]}")
         
-        # Calculate precise placement
-        target_top_z = target_center[2] + (BLOCK_SIZE / 2.0)
+        # 3. Use ONLY that tower’s XY
+        tower_xy = np.array(self.tower_centers[base])
+        
+        # 4. Compute Z from actual target block
+        target_center = self._block_center(target_block_id)
+        target_z = target_center[2]
+        BLOCK_SIZE = 0.04
+        new_z = target_z + BLOCK_SIZE
+        # Calculate precise placement using FIXED XY
+        target_top_z = target_z + (BLOCK_SIZE / 2.0)
         final_block_bottom_z = target_top_z
         final_block_center_z = final_block_bottom_z + (BLOCK_SIZE / 2.0)
         final_gripper_z = final_block_center_z + self.config.grasp_offset
         
+        # Use FIXED tower center for XY positioning
+        target_xy = tower_xy
+        
         # High approach - ABOVE target
-        high_pos = np.array([target_center[0], target_center[1], final_gripper_z + 0.15])
+        high_pos = np.array([target_xy[0], target_xy[1], final_gripper_z + 0.15])
         
         # Low approach - just above placement
-        low_pos = np.array([target_center[0], target_center[1], final_gripper_z + 0.03])
+        low_pos = np.array([target_xy[0], target_xy[1], final_gripper_z + 0.03])
         
         # Final placement - ON TARGET (no gap for drop)
-        place_pos = np.array([target_center[0], target_center[1], final_gripper_z])
+        place_pos = np.array([target_xy[0], target_xy[1], final_gripper_z])
         
         # Move to high approach
         q_high = self._ik_for_pose(high_pos, self.grasp_quat)
@@ -407,6 +424,19 @@ class MotionPrimitiveExecutor:
             self.robot.control_dofs_position(q)
             self.scene.step()
         
+        # Hold position to let block settle
+        print("[motion] Holding position for stability...")
+        hold_q = self.robot.get_qpos()
+        if hasattr(hold_q, "cpu"):
+            hold_q = hold_q.cpu().numpy().copy()
+        else:
+            hold_q = np.array(hold_q, dtype=float, copy=True)
+        
+        # Hold for 100 steps (~1 second)
+        for _ in range(100):
+            self.robot.control_dofs_position(hold_q)
+            self.scene.step()
+        
         # Release
         self.open_gripper()
         
@@ -429,5 +459,31 @@ class MotionPrimitiveExecutor:
                 self.robot.control_dofs_position(q)
                 self.scene.step()
         
-        print("[motion] ✅ STACK COMPLETE")
+        print("[motion]STACK COMPLETE")
         return True
+    def _find_base_block(self, block_id, predicates):
+        """
+        From target block, walk up ON(x,y) predicates until reaching ONTABLE(base).
+        That base is the tower base for this block.
+        """
+        current = block_id
+        
+        while True:
+            found_parent = False
+            
+            # Check ON(current, parent)
+            for p in predicates:
+                if p.startswith("ON("):
+                    # Parse ON(a,b)
+                    inside = p[3:-1]  # remove ON( )
+                    a, b = inside.split(",")
+                    
+                    if a == current:
+                        # a is on b
+                        current = b
+                        found_parent = True
+                        break
+            
+            if not found_parent:
+                # No ON(a,b) found → must be base (ONTABLE)
+                return current

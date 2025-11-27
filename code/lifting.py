@@ -17,20 +17,13 @@ from typing import Dict, Set, Tuple, Any
 import numpy as np
 
 
-# -----------------------------------------------------------------------------
 # Configuration constants
-# -----------------------------------------------------------------------------
-
 BLOCK_HEIGHT = 0.04          # cube size (m)
 TABLE_Z = 0.02               # z-position of top of table
 ON_Z_TOL = 0.015             # tolerance for ON relationship
 XY_TOL = 0.03                # horizontal tolerance for alignment
 
-
-# -----------------------------------------------------------------------------
 # Helper utilities
-# -----------------------------------------------------------------------------
-
 def color_name_map() -> Dict[str, str]:
     """Mapping from block key to uppercase name (for predicates)."""
     return {
@@ -51,10 +44,7 @@ def block_centroid(block: Any) -> np.ndarray:
     return np.array(pos, dtype=float)
 
 
-# -----------------------------------------------------------------------------
 # Main predicate extraction
-# -----------------------------------------------------------------------------
-
 def extract_predicates(
     blocks_state: Dict[str, Any],
     franka: Any,
@@ -73,9 +63,7 @@ def extract_predicates(
     predicates: Set[Tuple[str, ...]] = set()
     names = color_name_map()
 
-    # ------------------------------------------------------------
     # Determine ON / ONTABLE relations
-    # ------------------------------------------------------------
     block_positions = {k: block_centroid(v) for k, v in blocks_state.items()}
 
     # keep track of which block has something on top of it
@@ -102,17 +90,13 @@ def extract_predicates(
             if abs(top_pos[2] - TABLE_Z) <= ON_Z_TOL:
                 predicates.add(("ONTABLE", names[top_key]))
 
-    # ------------------------------------------------------------
     # Determine CLEAR relations
-    # ------------------------------------------------------------
     supported_blocks = {b for (_, _, b) in predicates if _ == "ON"}
     for k in blocks_state:
         if k not in supported_blocks:
             predicates.add(("CLEAR", names[k]))
 
-    # ------------------------------------------------------------
     # Determine gripper / holding state
-    # ------------------------------------------------------------
     qpos = franka.get_qpos()
     left_finger = qpos[-2]
     right_finger = qpos[-1]
@@ -139,10 +123,7 @@ def extract_predicates(
     return predicates
 
 
-# -----------------------------------------------------------------------------
 # Utility: pretty printing
-# -----------------------------------------------------------------------------
-
 def format_predicates(preds: Set[Tuple[str, ...]]) -> str:
     """Return a readable string representation for logging/debugging."""
     lines = []
@@ -158,10 +139,7 @@ def format_predicates(preds: Set[Tuple[str, ...]]) -> str:
     return "\n".join(lines)
 
 
-# -----------------------------------------------------------------------------
 # Quick self-test (optional)
-# -----------------------------------------------------------------------------
-
 if __name__ == "__main__":
     # This small test just ensures import works; full test requires Genesis running.
     print("lifting.py loaded successfully.")

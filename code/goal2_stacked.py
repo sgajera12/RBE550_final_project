@@ -1,15 +1,17 @@
 """
-goal2_stacked.py
+goal2_stacked_tamp.py
 
-Goal 2: Build 5-block tower from pre-stacked 6-block tower
-Order (top to bottom): MAGENTA-YELLOW-BLUE-RED-GREEN
-= GREEN (base) → RED → BLUE → YELLOW → MAGENTA (top)
+Goal 2: Single 5-block tower - STACKED SCENARIO
+Starting with: All 6 blocks in one tower (R-G-B-Y-M-C from bottom to top)
+Goal: Build one 5-block tower
 
-Starting scene: All 6 blocks in one tower
-Strategy: Remove CYAN, keep other 5 in tower (they're already correct!)
+Tower: GREEN-RED-BLUE-YELLOW-MAGENTA (g-r-b-y-m)
+Cyan (c) remains on table
+
+Uses proper TAMP pipeline with Pyperplan
 
 Usage:
-    python goal2_stacked.py [gpu]
+    python goal2_stacked_tamp.py [gpu]
 """
 
 import sys
@@ -18,8 +20,10 @@ import genesis as gs
 
 from scenes import create_scene_stacked
 from motion_primitives import MotionPrimitiveExecutor
+from predicates import extract_predicates, print_predicates
+from task_planner import generate_pddl_problem, call_pyperplan, plan_to_string
 
-# Initialize
+# Initialize Genesis
 if len(sys.argv) > 1 and sys.argv[1] == "gpu":
     gs.init(backend=gs.gpu, logging_level="Warning", logger_verbose_time=False)
 else:
@@ -39,12 +43,11 @@ franka.set_dofs_force_range(
     np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),
 )
 
-print("="*80)
-print("GOAL 2: BUILD 5-BLOCK TOWER (STACKED START)")
-print("Starting: 6-block tower (R-G-B-Y-M-C from bottom)")
-print("Target: 5-block tower MAGENTA-YELLOW-BLUE-RED-GREEN (top to bottom)")
-print("Strategy: Remove CYAN only - other 5 blocks already in correct order!")
-print("="*80)
+print("=" * 80)
+print("GOAL 2: ONE 5-BLOCK TOWER - STACKED SCENARIO")
+print("=" * 80)
+print("\nInitial: One 6-block tower (R-G-B-Y-M-C)")
+print("Goal: Build one 5-block tower (g-r-b-y-m) and c on table")
 
 # Move to home
 safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
@@ -60,173 +63,164 @@ for i in range(200):
     franka.control_dofs_position(q)
     scene.step()
 
-print("✅ At home\n")
+print("At home\n")
 
 for _ in range(50):
     franka.control_dofs_position(safe_home)
     scene.step()
 
-# Show initial positions
-print("INITIAL POSITIONS (6-block tower):")
-for key, block in blocks_state.items():
-    pos = np.array(block.get_pos())
-    print(f"  {key.upper()}: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]")
-
-executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
-
-# ============================================================================
-# STRATEGY: Just remove CYAN!
-# Initial tower: R-G-B-Y-M-C (bottom to top)
-# We need: R-G-B-Y-M (which is already there!)
-# So: pick CYAN and place it aside
-# ============================================================================
-
-print("\n" + "="*80)
-print("PHASE 1: UNSTACK ALL BLOCKS")
-print("Initial tower: R-G-B-Y-M-C (wrong order)")
-print("Need: G-R-B-Y-M (GREEN base)")
-print("="*80)
-
-# Unstack all 6 blocks and place aside
-print("\n[1/11] Pick CYAN (top)")
-if not executor.pick_up("c"):
-    sys.exit(1)
-print("[2/11] Place CYAN aside")
-if not executor.put_down(x=0.35, y=0.3):
-    sys.exit(1)
-
-print("\n[3/11] Pick MAGENTA")
-if not executor.pick_up("m"):
-    sys.exit(1)
-print("[4/11] Place MAGENTA aside")
-if not executor.put_down(x=0.35, y=0.1):
-    sys.exit(1)
-
-print("\n[5/11] Pick YELLOW")
-if not executor.pick_up("y"):
-    sys.exit(1)
-print("[6/11] Place YELLOW aside")
-if not executor.put_down(x=0.35, y=-0.1):
-    sys.exit(1)
-
-print("\n[7/11] Pick BLUE")
-if not executor.pick_up("b"):
-    sys.exit(1)
-print("[8/11] Place BLUE aside")
-if not executor.put_down(x=0.35, y=-0.3):
-    sys.exit(1)
-
-print("\n[9/11] Pick GREEN")
-if not executor.pick_up("g"):
-    sys.exit(1)
-print("[10/11] Place GREEN as base")
-if not executor.put_down(x=0.55, y=0.0):
-    sys.exit(1)
-
-# RED stays at bottom - that's fine, we'll leave it
-
-print("\n✅ All blocks unstacked")
-
-# ============================================================================
-# PHASE 2: BUILD 5-BLOCK TOWER: GREEN → RED → BLUE → YELLOW → MAGENTA
-# ============================================================================
-print("\n" + "="*80)
-print("PHASE 2: BUILD 5-BLOCK TOWER")
-print("="*80)
-
-print("\n[11/16] Pick RED")
-if not executor.pick_up("r"):
-    sys.exit(1)
-
-print("\n[12/16] Stack RED on GREEN")
-if not executor.stack_on("g"):
-    sys.exit(1)
-
-print("\n[13/16] Pick BLUE")
-if not executor.pick_up("b"):
-    sys.exit(1)
-
-print("\n[14/16] Stack BLUE on RED")
-if not executor.stack_on("r"):
-    sys.exit(1)
-
-print("\n[15/16] Pick YELLOW")
-if not executor.pick_up("y"):
-    sys.exit(1)
-
-print("\n[16/16] Stack YELLOW on BLUE")
-if not executor.stack_on("b"):
-    sys.exit(1)
-
-print("\n[17/16] Pick MAGENTA")
-if not executor.pick_up("m"):
-    sys.exit(1)
-
-print("\n[18/16] Stack MAGENTA on YELLOW")
-if not executor.stack_on("y"):
-    sys.exit(1)
-
-print("\n✅ 5-BLOCK TOWER COMPLETE!")
-
-# Wait for stabilization
-print("\nLetting tower stabilize...")
-for _ in range(50):
+# Let physics settle
+for _ in range(100):
     scene.step()
 
-# ============================================================================
-# VERIFICATION
-# ============================================================================
+# DEFINE GOAL - Same as scattered scenario
+goal_predicates = {
+    "ONTABLE(g)",
+    "ON(r,g)",
+    "ON(b,r)",
+    "ON(y,b)",
+    "ON(m,y)",
+    "CLEAR(m)",
+
+    "ONTABLE(c)",
+    "CLEAR(c)",
+
+    "HANDEMPTY()"
+}
+
+blocks = ['r', 'g', 'b', 'y', 'm', 'c']
+
+print("\n" + "="*80)
+print("GOAL STATE:")
+print("="*80)
+print("\nTower: GREEN → RED → BLUE → YELLOW → MAGENTA")
+print("Cyan remains on table")
+
+# TAMP EXECUTION LOOP
+executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
+domain_file = "/home/pinaka/RBE550Final/RBE550_final_project/code/blocksworld.pddl"
+
+max_iterations = 30
+iteration = 0
+
+print("\n" + "="*80)
+print("STARTING TAMP LOOP")
+print("="*80)
+
+while iteration < max_iterations:
+    iteration += 1
+    print(f"\n{'='*80}")
+    print(f"ITERATION {iteration}")
+    print(f"{'='*80}")
+
+    # STEP 1: SYMBOLIC ABSTRACTION
+    print("\n[Step 1] Extracting predicates from current scene...")
+    current_predicates = extract_predicates(scene, franka, blocks_state)
+    print_predicates(current_predicates)
+
+    # Check goal reached
+    if goal_predicates.issubset(current_predicates):
+        print("\nGOAL REACHED!")
+        break
+
+    # STEP 2: TASK PLANNING
+    print("\n[Step 2] Calling task planner (Pyperplan)...")
+    problem_string = generate_pddl_problem(
+        current_predicates,
+        goal_predicates,
+        blocks,
+        f"goal2_stacked_iter{iteration}"
+    )
+
+    debug_problem_file = f"/tmp/problem_goal2_stacked_iter{iteration}.pddl"
+    with open(debug_problem_file, "w") as f:
+        f.write(problem_string)
+    print(f"  Problem saved to: {debug_problem_file}")
+
+    plan = call_pyperplan(domain_file, problem_string)
+
+    if not plan:
+        print("No plan found!")
+        break
+
+    print(f"\nPlan found ({len(plan)} actions):")
+    print(plan_to_string(plan))
+
+    # STEP 3: Execute FIRST action
+    action_name, args = plan[0]
+    print(f"\n[Step 3] Executing: {action_name.upper()}({', '.join(args)})")
+
+    success = False
+
+    if action_name == "pick-up":
+        block_id = args[0]
+        success = executor.pick_up(block_id)
+
+    elif action_name == "put-down":
+        block_id = args[0]
+
+        # Same safe positions as Goal 1 stacked
+        safe_positions = {
+            'r': (0.45, -0.45),
+            'g': (0.45,  -0.20),
+            'b': (0.45,  0.15),
+            'y': (0.65, -0.15),
+            'm': (0.65,  0.00),
+            'c': (0.65,  0.15),
+        }
+
+        if block_id in safe_positions:
+            x, y = safe_positions[block_id]
+            success = executor.put_down(x, y)
+        else:
+            success = executor.put_down()
+
+    elif action_name == "stack":
+        block_id = args[0]
+        target_id = args[1]
+        success = executor.stack_on(target_id, current_predicates)
+
+    elif action_name == "unstack":
+        block_id = args[0]
+        success = executor.pick_up(block_id)
+
+    else:
+        print(f"Unknown action: {action_name}")
+        break
+
+    if not success:
+        print("Action failed! Re-planning...")
+    else:
+        print("Action completed successfully")
+
+    for _ in range(50):
+        scene.step()
+
+    print("\n[Step 4] Re-grounding predicates...")
+
+# FINAL VERIFICATION
 print("\n" + "="*80)
 print("FINAL VERIFICATION")
 print("="*80)
 
-for _ in range(30):
+for _ in range(100):
     scene.step()
 
-print("\nFINAL POSITIONS:")
-final_pos = {}
-for key, block in blocks_state.items():
-    pos = np.array(block.get_pos())
-    final_pos[key] = pos
-    print(f"  {key.upper()}: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]")
+final_predicates = extract_predicates(scene, franka, blocks_state)
+print_predicates(final_predicates)
 
-# Analyze tower (G-R-B-Y-M)
-g_pos = final_pos['g']
-r_pos = final_pos['r']
-b_pos = final_pos['b']
-y_pos = final_pos['y']
-m_pos = final_pos['m']
-
-print("\n" + "="*80)
-print("5-BLOCK TOWER ANALYSIS:")
-print("="*80)
-
-# Check each interface
-interfaces = [
-    ("GREEN-RED", g_pos, r_pos),
-    ("RED-BLUE", r_pos, b_pos),
-    ("BLUE-YELLOW", b_pos, y_pos),
-    ("YELLOW-MAGENTA", y_pos, m_pos),
-]
-
-all_good = True
-for name, bottom, top in interfaces:
-    v_dist = top[2] - bottom[2]
-    h_dist = np.sqrt((top[0] - bottom[0])**2 + (top[1] - bottom[1])**2)
-    is_good = (0.03 < v_dist < 0.05 and h_dist < 0.03)
-    all_good = all_good and is_good
-    print(f"{name}: v={v_dist:.3f}m, h={h_dist:.3f}m → {'✅' if is_good else '❌'}")
-
-print(f"\nTotal tower height: {m_pos[2] - g_pos[2]:.3f}m (expect ~0.16m)")
-
-print("\n" + "="*80)
-if all_good:
-    print("🎉🎉🎉 SUCCESS! GOAL 2 COMPLETE (FROM STACKED)! 🎉🎉🎉")
-    print("\n✅ 5-block tower: MAGENTA-YELLOW-BLUE-RED-GREEN (top to bottom)")
+if goal_predicates.issubset(final_predicates):
+    print("="*80)
+    print("SUCCESS! GOAL 2 (STACKED) COMPLETE!")
+    print("="*80)
+    print("\nFinal Tower: G → R → B → Y → M")
+    print("Cyan on table")
 else:
-    print("⚠️  TOWER MAY HAVE ISSUES")
-print("="*80)
+    print("Goal not fully achieved")
+    missing = goal_predicates - final_predicates
+    print(f"\nMissing predicates: {missing}")
 
+print(f"\nTotal iterations: {iteration}")
 print("\nPress Ctrl+C to exit...")
 try:
     while True:

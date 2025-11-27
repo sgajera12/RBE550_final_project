@@ -90,7 +90,7 @@ class PlannerInterface:
             A list of waypoints representing the planned path. Each waypoint is an array storing the entity's qpos of a single time step.
         """
 
-        ########## validate ##########
+        #validate 
         try:
             from ompl import base as ob
             from ompl import geometric as og
@@ -132,13 +132,13 @@ class PlannerInterface:
         if qpos_start.shape != (self.robot.n_qs,) or qpos_goal.shape != (self.robot.n_qs,):
             gs.raise_exception("Invalid shape for `qpos_start` or `qpos_goal`.")
 
-        ######### process joint limit ##########
+        #process joint limit 
 
         # ensure we use numpy float64 for bounds
         q_limit_lower = np.asarray(self.robot.q_limit[0], dtype=float)
         q_limit_upper = np.asarray(self.robot.q_limit[1], dtype=float)
 
-        ######### setup OMPL ##########
+        #setup OMPL 
         space = ob.RealVectorStateSpace(self.robot.n_qs)
         bounds = ob.RealVectorBounds(self.robot.n_qs)
 
@@ -185,7 +185,7 @@ class PlannerInterface:
         ss.setStartAndGoalStates(state_start, state_goal)
         ss.setup()
 
-        ######### solve ##########
+        #solve
         solved = ss.solve(timeout)
         waypoints = []
         if solved:
@@ -200,7 +200,7 @@ class PlannerInterface:
         else:
             gs.logger.warning("Path planning failed. Returning empty path.")
 
-        ########## restore original state #########
+        #restore original state 
         self.robot.set_qpos(qpos_cur)
 
         return waypoints

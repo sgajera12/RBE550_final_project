@@ -1,21 +1,17 @@
 """
-goal1_tamp_proper.py
+goal2_scattered_tamp.py
 
-Goal 1: Two 3-block towers using PROPER TAMP pipeline
+Goal 2: Single 5-block tower - SCATTERED SCENARIO
+Starting with: 6 blocks scattered on table
+Goal: Build one 5-block tower
 
-Pipeline:
-1. Symbolic Abstraction → Extract predicates from scene
-2. Task Planning → Call Pyperplan to get action sequence
-3. Execute first action → Use motion primitives
-4. Re-ground → Extract new predicates
-5. Re-plan if needed → Loop until goal reached
+Tower: GREEN-RED-BLUE-YELLOW-MAGENTA (g-r-b-y-m from bottom to top)
+Cyan (c) remains on table
 
-Goal:
-  Tower 1: GREEN-RED-BLUE (g on table, r on g, b on r)
-  Tower 2: MAGENTA-YELLOW-CYAN (m on table, y on m, c on y)
+Uses proper TAMP pipeline with Pyperplan
 
 Usage:
-    python goal1_tamp_proper.py [gpu]
+    python goal2_scattered_tamp.py [gpu]
 """
 
 import sys
@@ -48,8 +44,10 @@ franka.set_dofs_force_range(
 )
 
 print("="*80)
-print("GOAL 1: TWO 3-BLOCK TOWERS (PROPER TAMP PIPELINE)")
+print("GOAL 2: SINGLE 5-BLOCK TOWER - SCATTERED SCENARIO")
 print("="*80)
+print("\nInitial: 6 blocks scattered on table")
+print("Goal: Build 5-block tower (GREEN-RED-BLUE-YELLOW-MAGENTA)")
 
 # Move to home
 safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
@@ -75,18 +73,20 @@ for _ in range(50):
 for _ in range(100):
     scene.step()
 
-# DEFINE GOAL
+# DEFINE GOAL - 5-block tower
 goal_predicates = {
-    # Tower 1: g-r-b
-    "ON(r,g)",
-    "ON(b,r)",
-    "ONTABLE(g)",
-    "CLEAR(b)",
+    # Tower: g-r-b-y-m (5 blocks)
+    "ONTABLE(g)",      # Green on table (base)
+    "ON(r,g)",         # Red on green
+    "ON(b,r)",         # Blue on red
+    "ON(y,b)",         # Yellow on blue
+    "ON(m,y)",         # Magenta on yellow (top)
     
-    # Tower 2: m-y-c
-    "ON(y,m)",
-    "ON(c,y)",
-    "ONTABLE(m)",
+    # Top is clear
+    "CLEAR(m)",
+    
+    # Cyan remains on table
+    "ONTABLE(c)",
     "CLEAR(c)",
     
     # Gripper
@@ -98,8 +98,9 @@ blocks = ['r', 'g', 'b', 'y', 'm', 'c']
 print("\n" + "="*80)
 print("GOAL STATE:")
 print("="*80)
-print("\nTower 1: GREEN → RED → BLUE")
-print("Tower 2: MAGENTA → YELLOW → CYAN")
+print("\nTower: GREEN → RED → BLUE → YELLOW → MAGENTA")
+print("      (bottom)                        (top)")
+print("\nCyan remains on table")
 print("\nGoal predicates:")
 for p in sorted(goal_predicates):
     print(f"  {p}")
@@ -121,7 +122,7 @@ while iteration < max_iterations:
     print(f"ITERATION {iteration}")
     print(f"{'='*80}")
     
-    # STEP 1: SYMBOLIC ABSTRACTION (Lifting)
+    # STEP 1: SYMBOLIC ABSTRACTION
     print("\n[Step 1] Extracting predicates from current scene...")
     current_predicates = extract_predicates(scene, franka, blocks_state)
     print_predicates(current_predicates)
@@ -137,11 +138,11 @@ while iteration < max_iterations:
         current_predicates,
         goal_predicates,
         blocks,
-        f"goal1_iter{iteration}"
+        f"goal2_scattered_iter{iteration}"
     )
     
     # Debug: Save problem file
-    debug_problem_file = f"/tmp/problem_iter{iteration}.pddl"
+    debug_problem_file = f"/tmp/problem_goal2_iter{iteration}.pddl"
     with open(debug_problem_file, 'w') as f:
         f.write(problem_string)
     print(f"  Problem saved to: {debug_problem_file}")
@@ -149,7 +150,7 @@ while iteration < max_iterations:
     plan = call_pyperplan(domain_file, problem_string)
     
     if not plan:
-        print("no plan found! Cannot reach goal.")
+        print("No plan found! Cannot reach goal.")
         break
     
     print(f"\nPlan found ({len(plan)} actions):")
@@ -171,17 +172,28 @@ while iteration < max_iterations:
     
     elif action_name == "put-down":
         block_id = args[0]
-        success = executor.put_down()
+        # Put down at safe position away from tower
+        # Cyan should go to side since it's not in tower
+        safe_positions = {
+            'c': (0.70, 0.0),  # Cyan goes to right side
+        }
+        
+        if block_id in safe_positions:
+            x, y = safe_positions[block_id]
+            success = executor.put_down(x, y)
+        else:
+            # Default position for temporary placement
+            success = executor.put_down(0.45, 0.0)
     
     elif action_name == "stack":
         block_id = args[0]
         target_id = args[1]
-        success = executor.stack_on(target_id,current_predicates)
+        success = executor.stack_on(target_id, current_predicates)
     
     elif action_name == "unstack":
         block_id = args[0]
         from_id = args[1]
-        success = executor.pick_up(block_id)  # Unstack = pick from stack
+        success = executor.pick_up(block_id)
     
     else:
         print(f"Unknown action: {action_name}")
@@ -196,7 +208,7 @@ while iteration < max_iterations:
     for _ in range(50):
         scene.step()
     
-    # STEP 4: RE-GROUND (loop back to Step 1)
+    # STEP 4: RE-GROUND
     print("\n[Step 4] Re-grounding predicates...")
 
 # FINAL VERIFICATION
@@ -210,15 +222,31 @@ for _ in range(100):
 final_predicates = extract_predicates(scene, franka, blocks_state)
 print_predicates(final_predicates)
 
+# Measure tower height
+tower_blocks = ['g', 'r', 'b', 'y', 'm']
+positions = []
+for bid in tower_blocks:
+    if bid in blocks_state:
+        pos = np.array(blocks_state[bid].get_pos())
+        positions.append(pos)
+
+if len(positions) == 5:
+    heights = [p[2] for p in positions]
+    tower_height = max(heights) - min(heights) + 0.04  # Add one block height
+    print(f"\nTower metrics:")
+    print(f"  Number of blocks: {len(positions)}")
+    print(f"  Tower height: {tower_height:.3f}m")
+    print(f"  Expected height: ~0.20m (5 blocks × 0.04m)")
+
 # Check goal
 if goal_predicates.issubset(final_predicates):
+    print("\n" + "="*80)
+    print("SUCCESS! GOAL 2 (SCATTERED) COMPLETE!")
     print("="*80)
-    print("SUCCESS! GOAL 1 COMPLETE!")
-    print("="*80)
-    print("\nTower 1: GREEN-RED-BLUE")
-    print("Tower 2: MAGENTA-YELLOW-CYAN")
+    print("\n5-block tower: GREEN-RED-BLUE-YELLOW-MAGENTA")
+    print("Cyan block on table")
 else:
-    print("Goal not fully achieved")
+    print("\nGoal not fully achieved")
     missing = goal_predicates - final_predicates
     print(f"\nMissing predicates: {missing}")
 
