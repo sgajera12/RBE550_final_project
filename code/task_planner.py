@@ -10,14 +10,8 @@ import tempfile
 from typing import Set, List, Tuple
 
 
-def generate_pddl_problem(
-    predicates: Set[str],
-    goal_predicates: Set[str],
-    blocks: List[str],
-    problem_name: str = "blocks_problem"
-) -> str:
+def generate_pddl_problem(predicates: Set[str],goal_predicates: Set[str],blocks: List[str],problem_name: str = "blocks_problem") -> str:
     """Generate PDDL problem file from predicates"""
-    
     def format_pred(p: str) -> str:
         """Convert 'ON(r,g)' to '(on r g)'"""
         p = p.lower()
@@ -35,22 +29,13 @@ def generate_pddl_problem(
     init_preds = '\n    '.join([format_pred(p) for p in predicates])
     goal_preds = '\n      '.join([format_pred(p) for p in goal_predicates])
     
-    problem = f"""(define (problem {problem_name})
-  (:domain blocksworld)
-  
-  (:objects {' '.join(blocks)})
-  
-  (:init
-    {init_preds}
-  )
-  
-  (:goal
-    (and
-      {goal_preds}
-    )
-  )
-)
-"""
+    problem = f"""
+    (define (problem {problem_name}) 
+    (:domain blocksworld) 
+    (:objects {' '.join(blocks)}) 
+    (:init {init_preds}) 
+    (:goal (and {goal_preds})))
+    """
     return problem
 
 
@@ -70,12 +55,7 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
         print(f"  Domain: {domain_file}")
         print(f"  Problem: {problem_file}")
         
-        result = subprocess.run(
-            ['pyperplan', domain_file, problem_file],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        result = subprocess.run(['pyperplan', domain_file, problem_file],capture_output=True,text=True,timeout=30)
         
         print("\n--- Pyperplan Output ---")
         print(result.stdout)

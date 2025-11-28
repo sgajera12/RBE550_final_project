@@ -325,6 +325,82 @@ class MotionPrimitiveExecutor:
         print("[motion] PUT-DOWN SUCCESS")
         return True
 
+    def arrange_base_blocks(self, block_ids: list, target_center: tuple = None) -> bool:
+        """
+        Arrange 4 blocks into a tight 2x2 square by picking and placing them.
+        Blocks are placed close enough that they touch (4cm spacing center-to-center).
+        
+        Args:
+            block_ids: List of 4 block IDs to arrange (e.g., ['r', 'g', 'b', 'y'])
+            target_center: Optional (x, y) center for the square. Default: (0.55, 0.0)
+            
+        Returns:
+            bool: True if successful
+        """
+        if len(block_ids) != 4:
+            print(f"[motion] arrange_base_blocks requires 4 blocks, got {len(block_ids)}")
+            return False
+        
+        print(f"[motion] ARRANGING 2x2 BASE: {block_ids}")
+        
+        if target_center is None:
+            target_center = (0.55, 0.0)
+        
+        target_center = np.array(target_center)
+        
+        # Calculate target positions for 2x2 square with blocks TOUCHING
+        # Block size is 0.04m, so blocks touching means 0.04m spacing center-to-center
+        half_block = BLOCK_SIZE / 2.0  # 0.02m = 2cm
+        
+        target_positions = [
+            (target_center[0] - half_block, target_center[1] - half_block),  # Back-left
+            (target_center[0] + half_block, target_center[1] - half_block),  # Back-right
+            (target_center[0] - half_block, target_center[1] + half_block),  # Front-left
+            (target_center[0] + half_block, target_center[1] + half_block),  # Front-right
+        ]
+        
+        print(f"[motion] Target center: ({target_center[0]:.3f}, {target_center[1]:.3f})")
+        print(f"[motion] Blocks will be placed {BLOCK_SIZE*100:.1f}cm apart (touching)")
+        
+        # Pick up and place each block at exact positions
+        for idx, bid in enumerate(block_ids):
+            key = self._resolve_block_key(bid)
+            target_xy = target_positions[idx]
+            
+            print(f"\n[motion] >> Block {idx+1}/4: {key.upper()}")
+            print(f"[motion]    Target: ({target_xy[0]:.4f}, {target_xy[1]:.4f})")
+            
+            # Pick up block
+            if not self.pick_up(key):
+                print(f"[motion]  Failed to pick up {key}")
+                return False
+            
+            # Place at exact target position
+            if not self.put_down(x=target_xy[0], y=target_xy[1]):
+                print(f"[motion]  Failed to place {key}")
+                return False
+            
+            # Let physics settle
+            for _ in range(80):
+                self.scene.step()
+            
+            # Verify placement
+            actual_pos = self._block_center(key)
+            print(f"[motion]    ✓ Placed at ({actual_pos[0]:.4f}, {actual_pos[1]:.4f}, z={actual_pos[2]:.4f})")
+        
+        # Final verification
+        print(f"\n[motion] ========================================")
+        print(f"[motion] FINAL BASE CONFIGURATION:")
+        print(f"[motion] ========================================")
+        
+        for bid in block_ids:
+            key = self._resolve_block_key(bid)
+            pos = self._block_center(key)
+            print(f"[motion]   {key.upper()}: ({pos[0]:.4f}, {pos[1]:.4f}, z={pos[2]:.4f})")
+        
+        print(f"\n[motion]BASE ARRANGEMENT COMPLETE - Blocks are touching!")
+        return True
+
     def stack_on(self, target_block_id: Any,predicates=None) -> bool:
         """
             Stack current block on top of target_id block.
