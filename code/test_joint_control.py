@@ -31,7 +31,7 @@ Usage:
 import sys
 import numpy as np
 import genesis as gs
-from scenes import create_scene_6blocks
+from scenes import create_scene_10blocks
 
 # Initialize
 if len(sys.argv) > 1 and sys.argv[1] == "gpu":
@@ -39,7 +39,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "gpu":
 else:
     gs.init(backend=gs.cpu, logging_level="Warning", logger_verbose_time=False)
 
-scene, franka, blocks_state = create_scene_6blocks()
+scene, franka, blocks_state = create_scene_10blocks()
 
 # Strong gripper control
 franka.set_dofs_kp(

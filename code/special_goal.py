@@ -112,7 +112,7 @@ print("\nLetting physics settle after arrangement...")
 for _ in range(150):
     scene.step()
 
-print("✓ Base blocks arranged!")
+print("Base blocks arranged!")
 
 # Return to home position
 print("\nReturning to home...")
@@ -225,7 +225,7 @@ while iteration < max_iterations:
         print("No plan found! Cannot reach goal.")
         break
 
-    print(f"\n✓ Plan found ({len(plan)} actions):")
+    print(f"\nPlan found ({len(plan)} actions):")
     print(plan_to_string(plan))
 
     # STEP 3: EXECUTE FIRST ACTION

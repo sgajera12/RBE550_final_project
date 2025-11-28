@@ -161,17 +161,16 @@ def create_scene_10blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
     # add some random noise up to 5 cm in x/y
 
 
-    posR = _rand_xy((0.6, -0.4, 0.02))
-    posG = _rand_xy((0.6, -0.2, 0.02))
-    posB = _rand_xy((0.6, 0.0, 0.02))
-    posY = _rand_xy((0.6, 0.2, 0.02))
-    posO = _rand_xy((0.6, 0.4, 0.02))
-    posR_2 = _rand_xy((0.4, -0.4, 0.02))
-    posG_2 = _rand_xy((0.4, -0.2, 0.02))
-    posB_2 = _rand_xy((0.4, 0.0, 0.02))
-    posY_2 = _rand_xy((0.4, 0.2, 0.02))
-    posO_2 = _rand_xy((0.4, 0.4, 0.02))
-
+    posR = (0.35, -0.45, 0.02)
+    posG = (0.35, -0.30, 0.02)
+    posB = (0.50, -0.45, 0.02)
+    posY = (0.50, -0.30, 0.02)
+    posO = (0.66, -0.4, 0.02)
+    posR_2 = (0.35, 0.45, 0.02)
+    posG_2 = (0.35, 0.30, 0.02)
+    posB_2 = (0.50, 0.45, 0.02)
+    posY_2 = (0.50, 0.30, 0.02)
+    posO_2 = (0.65, 0.4, 0.02)
     cubeR = scene.add_entity(
         gs.morphs.Box(size=(0.04, 0.04, 0.04), pos= posR),
         surface=gs.options.surfaces.Plastic(color=(1.0, 0.0, 0.0)),
