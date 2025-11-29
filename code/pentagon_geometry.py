@@ -140,8 +140,12 @@ class PentagonEdge:
         """
         Get the rotation angle for block placement
         
-        Block should be rotated so one EDGE is parallel to pentagon edge
-        This means aligning with the tangent direction
+        Mathematical approach:
+        - All blocks start at 0° (1st side facing camera/user)
+        - edge1 (normal=90°, top) needs 0° rotation (1st side on edge)
+        - Other edges: rotate relative to edge1
+        
+        Formula: rotation = -(normal_angle - 90°) = 90° - normal_angle
         
         Args:
             layer: 1 or 2
@@ -150,10 +154,10 @@ class PentagonEdge:
             float: rotation angle in degrees (for robot wrist joint)
         """
         if layer == 1:
-            # Block edge should align with pentagon edge
-            # Use tangent angle (direction along the edge)
-            # Add 90 to rotate from tangent to face orientation
-            return (self.tangent_angle + 90) % 360
+            # Reference: edge1 (normal=90°) uses 0° rotation
+            # Other edges rotate relative to this
+            rotation = (90 - self.normal_angle) % 360
+            return rotation
         
         elif layer == 2:
             # Layer 2 blocks face the same way as their position angle
@@ -237,31 +241,5 @@ def print_pentagon_geometry():
     print("\n" + "="*70)
 
 
-def visualize_pentagon_top_view():
-    """
-    Create ASCII art visualization of pentagon top view
-    """
-    print("\n" + "="*70)
-    print("PENTAGON TOP VIEW (ASCII Visualization)")
-    print("="*70)
-    print("""
-                       edge1
-                      [BLOCK]
-                         |
-                    
-        edge5 [BLOCK] - + - [BLOCK] edge2
-                     /     \\
-                    /       \\
-              [BLOCK]       [BLOCK]
-               edge4         edge3
-
-        + = Pentagon center (0.50, 0.0)
-        [BLOCK] = Block placement positions (layer 1)
-        Each block face is parallel to pentagon edge
-    """)
-    print("="*70)
-
-
 if __name__ == "__main__":
     print_pentagon_geometry()
-    visualize_pentagon_top_view()

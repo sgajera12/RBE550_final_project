@@ -42,7 +42,7 @@ current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
 
-for i in range(200):
+for i in range(100):
     alpha = (i + 1) / 200.0
     q = (1 - alpha) * current + alpha * safe_home
     franka.control_dofs_position(q)
@@ -209,7 +209,7 @@ while iteration < max_iterations and blocks_placed < 5:
     print(f"Progress: {layer1_count}/5")
     
     if layer1_count >= 5:
-        print("✓ DONE!")
+        print("DONE!")
         break
     
     # Find next block
@@ -272,7 +272,7 @@ print(f"\nBlocks: {layer1_count}/5")
 print(f"Iterations: {iteration}")
 
 if layer1_count >= 5:
-    print("\n🎉 GOAL 4 COMPLETE!")
+    print("\nGOAL 4 COMPLETE!")
 
 print("\nCtrl+C to exit...")
 try:
