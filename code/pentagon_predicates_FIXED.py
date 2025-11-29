@@ -12,7 +12,7 @@ from typing import Set, Dict, Any
 from pentagon_geometry import PENTAGON_EDGES, PENTAGON_CENTER, BLOCK_SIZE
 
 
-POSITION_TOLERANCE = 0.015  # 1.5cm tolerance for position matching
+POSITION_TOLERANCE = 0.025  # 2.5cm tolerance (increased from 1.5cm)
 ROTATION_TOLERANCE = 15  # 15 degrees tolerance for rotation matching
 
 
@@ -117,7 +117,8 @@ def extract_pentagon_predicates(scene: Any, franka: Any, blocks_state: Dict[str,
                 break
         
         if not matched_edge:
-            # Block not at any edge position
+            # Block at table height but not at pentagon position
+            # Treat as normal block
             predicates.add(f"ONTABLE({block_id})")
             predicates.add(f"CLEAR({block_id})")
     

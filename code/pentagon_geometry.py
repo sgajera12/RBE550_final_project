@@ -140,8 +140,8 @@ class PentagonEdge:
         """
         Get the rotation angle for block placement
         
-        Block should be rotated so one face is parallel to pentagon edge
-        This means block is rotated to face the pentagon center
+        Block should be rotated so one EDGE is parallel to pentagon edge
+        This means aligning with the tangent direction
         
         Args:
             layer: 1 or 2
@@ -150,10 +150,10 @@ class PentagonEdge:
             float: rotation angle in degrees (for robot wrist joint)
         """
         if layer == 1:
-            # Block faces inward toward pentagon center
-            # Rotation angle is the normal angle (pointing outward)
-            # But we want block to face inward, so add 180
-            return (self.normal_angle + 180) % 360
+            # Block edge should align with pentagon edge
+            # Use tangent angle (direction along the edge)
+            # Add 90 to rotate from tangent to face orientation
+            return (self.tangent_angle + 90) % 360
         
         elif layer == 2:
             # Layer 2 blocks face the same way as their position angle
