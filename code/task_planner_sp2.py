@@ -1,3 +1,9 @@
+"""
+task_planner_typed.py
+
+Fixed task planner with support for typed PDDL domains.
+"""
+
 import os
 import sys
 import subprocess
@@ -10,9 +16,10 @@ def generate_pddl_problem(
     predicates: Set[str],
     goal_predicates: Set[str],
     blocks: List[str],
-    problem_name: str = "blocks_problem"
+    problem_name: str = "blocks_problem",
+    domain_name: str = "blocksworld-spatial"
 ) -> str:
-    """Generate PDDL problem file from predicates"""
+    """Generate PDDL problem file from predicates with typed objects"""
 
     def format_pred(p: str) -> str:
         """Convert 'ON(r,g)' to '(on r g)'"""
@@ -31,10 +38,13 @@ def generate_pddl_problem(
     init_preds = '\n    '.join([format_pred(p) for p in predicates])
     goal_preds = '\n      '.join([format_pred(p) for p in goal_predicates])
 
-    problem = f"""(define (problem {problem_name})
-  (:domain blocksworld)
+    # ← FIXED: Declare objects with type
+    typed_objects = ' '.join([f"{block} - block" for block in blocks])
 
-  (:objects {' '.join(blocks)})
+    problem = f"""(define (problem {problem_name})
+  (:domain {domain_name})
+
+  (:objects {typed_objects})
 
   (:init
     {init_preds}
@@ -52,7 +62,7 @@ def generate_pddl_problem(
 
 def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, List[str]]]:
     """
-    Call Pyperplan to solve planning problem.
+    Call Pyperplan to solve planning problem with A* and heuristic.
 
     Returns:
         List of (action_name, [args])
@@ -66,16 +76,13 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
         print(f"  Domain: {domain_file}")
         print(f"  Problem: {problem_file}")
 
-        # ------------------------------------------------------------------
-        # Prefer the 'pyperplan' CLI if available, otherwise use python -m.
-        # ------------------------------------------------------------------
         cli_path = shutil.which("pyperplan")
         if cli_path is not None:
-            cmd = [cli_path, domain_file, problem_file]
+            # Use A* search with FF heuristic for smarter planning
+            cmd = [cli_path, domain_file, problem_file, "-s", "astar", "-H", "hff"]
         else:
-            # Fallback: module CLI. This should behave like the 'pyperplan'
-            # command and print the plan to stdout (and/or create a .soln).
-            cmd = [sys.executable, "-m", "pyperplan", domain_file, problem_file]
+            # Fallback with smarter search
+            cmd = [sys.executable, "-m", "pyperplan", domain_file, problem_file, "-s", "astar", "-H", "hff"]
 
         result = subprocess.run(
             cmd,
@@ -97,9 +104,7 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
             print("Pyperplan failed!")
             return []
 
-        # ------------------------------------------------------------------
-        # 1) Try the classic .soln file first (old behaviour).
-        # ------------------------------------------------------------------
+        # Try .soln file first
         solution_file = problem_file + '.soln'
         plan: List[Tuple[str, List[str]]] = []
 
@@ -116,21 +121,16 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
                             plan.append((action_name, args))
             os.remove(solution_file)
 
-        # ------------------------------------------------------------------
-        # 2) If no .soln file, fall back to parsing stdout/stderr directly.
-        #    Newer pyperplan versions sometimes just print the plan.
-        # ------------------------------------------------------------------
+        # Fallback: parse stdout/stderr
         if not plan:
             combined = (result.stdout or "") + "\n" + (result.stderr or "")
             for line in combined.splitlines():
                 line = line.strip()
-                # Lines look like: "(pick-up r)" or "0: (pick-up r)"
                 if '(' in line and ')' in line:
-                    # Get the first "( ... )" substring
                     start = line.find('(')
                     end = line.find(')', start)
                     if start != -1 and end != -1:
-                        inner = line[start + 1:end]  # without parentheses
+                        inner = line[start + 1:end]
                         parts = inner.split()
                         if parts:
                             action_name = parts[0]

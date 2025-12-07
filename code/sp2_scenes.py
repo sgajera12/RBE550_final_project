@@ -158,19 +158,17 @@ def create_scene_10blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
 
     # basic geometry
     plane = scene.add_entity(gs.morphs.Plane())
-    # add some random noise up to 5 cm in x/y
-
-
+    
     posR = _rand_xy((0.6, -0.4, 0.02))
     posG = _rand_xy((0.6, -0.2, 0.02))
-    posB = _rand_xy((0.6, 0.0, 0.02))
+    posB = _rand_xy((0.65, 0.0, 0.02))
     posY = _rand_xy((0.6, 0.2, 0.02))
     posO = _rand_xy((0.6, 0.4, 0.02))
-    posR_2 = _rand_xy((0.4, -0.4, 0.02))
-    posG_2 = _rand_xy((0.4, -0.2, 0.02))
-    posB_2 = _rand_xy((0.4, 0.0, 0.02))
-    posY_2 = _rand_xy((0.4, 0.2, 0.02))
-    posO_2 = _rand_xy((0.4, 0.4, 0.02))
+    posR_2 = _rand_xy((0.3, -0.4, 0.02))
+    posG_2 = _rand_xy((0.3, -0.2, 0.02))
+    posB_2 = _rand_xy((0.3, 0.0, 0.02))
+    posY_2 = _rand_xy((0.3, 0.2, 0.02))
+    posO_2 = _rand_xy((0.3, 0.3, 0.02))
 
     cubeR = scene.add_entity(
         gs.morphs.Box(size=(0.04, 0.04, 0.04), pos= posR),
@@ -227,5 +225,79 @@ def create_scene_10blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
     _elevate_robot_base(franka)
 
     blocks_state: Dict[str, Any] = {"r": cubeR, "g": cubeG, "b": cubeB, "y": cubeY, "o": cubeO,"r2": cubeR_2, "g2": cubeG_2, "b2": cubeB_2, "y2": cubeY_2, "o2": cubeO_2}
+
+    return scene, franka, blocks_state
+
+def create_scene_3red_3green() -> Tuple[Any, Any, Dict[str, Any], Any]:
+    """Create scene with 3 red blocks and 3 green blocks.
+    
+    Uses same placement strategy as create_scene_6blocks.
+    Blocks are named: r1, r2, r3, g1, g2, g3
+    
+    Returns:
+        scene, franka_adapter, blocks_state, end_effector
+    """
+    scene = _build_base_scene()
+
+    # basic geometry
+    plane = scene.add_entity(gs.morphs.Plane())
+    
+    # Add random noise up to 5 cm in x/y (same as original)
+    posR1 = _rand_xy((0.65, 0.0, 0.02))
+    posR2 = _rand_xy((0.55, 0.2, 0.02))
+    posR3 = _rand_xy((0.6, 0.4, 0.02))
+    posG1 = _rand_xy((0.45, 0.0, 0.02))
+    posG2 = _rand_xy((0.45, 0.2, 0.02))
+    posG3 = _rand_xy((0.45, 0.4, 0.02))
+
+    # Create 3 red blocks
+    cubeR1 = scene.add_entity(
+        gs.morphs.Box(size=(0.04, 0.04, 0.04), pos=posR1),
+        surface=gs.options.surfaces.Plastic(color=(1.0, 0.0, 0.0)),
+    )
+    cubeR2 = scene.add_entity(
+        gs.morphs.Box(size=(0.04, 0.04, 0.04), pos=posR2),
+        surface=gs.options.surfaces.Plastic(color=(1.0, 0.0, 0.0)),
+    )
+    cubeR3 = scene.add_entity(
+        gs.morphs.Box(size=(0.04, 0.04, 0.04), pos=posR3),
+        surface=gs.options.surfaces.Plastic(color=(1.0, 0.0, 0.0)),
+    )
+    
+    # Create 3 green blocks
+    cubeG1 = scene.add_entity(
+        gs.morphs.Box(size=(0.04, 0.04, 0.04), pos=posG1),
+        surface=gs.options.surfaces.Plastic(color=(0.0, 1.0, 0.0)),
+    )
+    cubeG2 = scene.add_entity(
+        gs.morphs.Box(size=(0.04, 0.04, 0.04), pos=posG2),
+        surface=gs.options.surfaces.Plastic(color=(0.0, 1.0, 0.0)),
+    )
+    cubeG3 = scene.add_entity(
+        gs.morphs.Box(size=(0.04, 0.04, 0.04), pos=posG3),
+        surface=gs.options.surfaces.Plastic(color=(0.0, 1.0, 0.0)),
+    )
+
+    # Add robot
+    franka_raw = scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
+    franka = RobotAdapter(franka_raw, scene)
+
+    # Build scene (construct physics/visuals)
+    scene.build()
+
+    # Initial robot pose (7 arm joints + 2 gripper fingers)
+    franka.set_qpos(np.array([0.0, -0.5, -0.2, -1.0, 0.0, 1.00, 0.5, 0.02, 0.02]))
+
+    # Slightly raise robot base to avoid initial collisions
+    _elevate_robot_base(franka)
+
+    blocks_state: Dict[str, Any] = {
+        "r1": cubeR1, 
+        "r2": cubeR2, 
+        "r3": cubeR3,
+        "g1": cubeG1, 
+        "g2": cubeG2, 
+        "g3": cubeG3
+    }
 
     return scene, franka, blocks_state
