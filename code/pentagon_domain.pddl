@@ -1,29 +1,32 @@
-(define (domain pentagon)
-  (:requirements :strips)
+(define (domain pentagon-world)
+  (:requirements :strips :typing)
+  
+  (:types block)
   
   (:predicates
-    (on ?x ?y)
-    (ontable ?x)
-    (clear ?x)
-    (holding ?x)
-    (handempty)
-    
-    (pentagon-edge ?e)
-    (layer ?l)
-    (at-edge ?b ?e ?l)
-    (edge-free ?e ?l)
-    (edge-occupied ?e ?l)
-    (in-layer ?b ?l)
+    (on ?x - block ?y - block)        ; block x is on block y
+    (ontable ?x - block)               ; block x is on the table
+    (clear ?x - block)                 ; nothing is on top of block x
+    (holding ?x - block)               ; robot is holding block x
+    (handempty)                        ; robot gripper is empty
+    (base-block ?x - block)            ; block is designated as base block
+    (top-block ?x - block)             ; block is designated as top block
+    (placed-in-base ?x - block)        ; base block has been placed
+    (stacked-on-two ?x - block)        ; top block has been stacked
   )
   
+  ;;; Pick up a block from the table
   (:action pick-up
-    :parameters (?x)
+    :parameters (?x - block)
     :precondition (and 
       (clear ?x)
       (ontable ?x)
       (handempty)
+      ; REMOVED: (not (placed-in-base ?x))
+      ; Pyperplan doesn't support negation in preconditions (pure STRIPS)
+      ; We'll handle base block protection in Phase 2 by not including them in objects
     )
-    :effect (and
+    :effect (and 
       (not (ontable ?x))
       (not (clear ?x))
       (not (handempty))
@@ -31,55 +34,38 @@
     )
   )
   
-  (:action put-down
-    :parameters (?x)
-    :precondition (holding ?x)
+  ;;; Place a base block on the table in pentagon formation
+  (:action place-in-base
+    :parameters (?x - block)
+    :precondition (and
+      (holding ?x)
+      (base-block ?x)
+    )
     :effect (and
       (not (holding ?x))
       (clear ?x)
       (handempty)
       (ontable ?x)
+      (placed-in-base ?x)
     )
   )
   
-  (:action place-at-edge
-    :parameters (?b ?e ?l)
-    :precondition (and 
-      (holding ?b)
-      (pentagon-edge ?e)
-      (edge-free ?e ?l)
-      (layer ?l)
-    )
-    :effect (and
-      (not (holding ?b))
-      (at-edge ?b ?e ?l)
-      (edge-occupied ?e ?l)
-      (not (edge-free ?e ?l))
-      (in-layer ?b ?l)
-      (clear ?b)
-      (ontable ?b)
-      (handempty)
-    )
-  )
-  
-  (:action pickup-from-edge
-    :parameters (?b ?e ?l)
+  ;;; Stack a top block on the base pentagon
+  ;;; Planner doesn't specify WHERE - execution layer uses geometry!
+  (:action stack-on-two-blocks
+    :parameters (?x - block)
     :precondition (and
-      (at-edge ?b ?e ?l)
-      (clear ?b)
-      (handempty)
-      (pentagon-edge ?e)
-      (layer ?l)
+      (holding ?x)
+      (top-block ?x)
+      ; That's it! No need to specify base blocks
+      ; Execution layer knows where to place based on geometry
     )
     :effect (and
-      (holding ?b)
-      (not (at-edge ?b ?e ?l))
-      (not (clear ?b))
-      (not (handempty))
-      (edge-free ?e ?l)
-      (not (edge-occupied ?e ?l))
-      (not (in-layer ?b ?l))
-      (not (ontable ?b))
+      (not (holding ?x))
+      (clear ?x)
+      (handempty)
+      (stacked-on-two ?x)
+      ; Don't modify any base block predicates
     )
   )
 )
