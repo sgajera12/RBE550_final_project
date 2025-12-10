@@ -21,7 +21,7 @@ import sys
 import numpy as np
 import genesis as gs
 
-from scenes import create_scene_10blocks
+from scenes import create_scene_10blocks2ln
 from motion_primitives import MotionPrimitiveExecutor
 from predicates import extract_predicates, print_predicates
 from task_planner import generate_pddl_problem, call_pyperplan, plan_to_string
@@ -32,7 +32,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "gpu":
 else:
     gs.init(backend=gs.cpu, logging_level="Warning", logger_verbose_time=False)
 
-scene, franka, blocks_state = create_scene_10blocks()
+scene, franka, blocks_state = create_scene_10blocks2ln()
 
 # Strong gripper control
 franka.set_dofs_kp(
@@ -61,8 +61,8 @@ current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
 
-for i in range(200):
-    alpha = (i + 1) / 200.0
+for i in range(100):
+    alpha = (i + 1) / 100.0
     q = (1 - alpha) * current + alpha * safe_home
     franka.control_dofs_position(q)
     scene.step()
