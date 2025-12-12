@@ -4,13 +4,7 @@
 (define (domain blocksworld)
   (:requirements :strips)
   
-  (:predicates
-    (on ?x ?y)         ; block x is on block y
-    (ontable ?x)       ; block x is on the table
-    (clear ?x)         ; nothing is on top of block x
-    (holding ?x)       ; robot is holding block x
-    (handempty)        ; robot gripper is empty
-  )
+  (:predicates (on ?x ?y) (ontable ?x) (clear ?x) (holding ?x) (handempty))
   
   ;; Pick up a block from the table
   (:action pick-up

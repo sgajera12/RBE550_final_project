@@ -18,14 +18,12 @@ import genesis as gs
 
 from scenes import create_scene_10blocks
 from motion_primitives import MotionPrimitiveExecutor
-from pentagon_predicates import extract_predicates, print_predicates
-from pentagon_task_planner import generate_pddl_problem, call_pyperplan, plan_to_string
+from predicates import extract_predicates, print_predicates
+from task_planner import generate_pddl_problem, call_pyperplan_sp1, plan_to_string
 
 BLOCK_SIZE = 0.04  # 4cm blocks
 
-# ---------------------------------------------------------------------------
-# 1) Initialize Genesis
-# ---------------------------------------------------------------------------
+#initialize Genesis
 if len(sys.argv) > 1 and sys.argv[1] == "gpu":
     gs.init(backend=gs.gpu, logging_level="Warning", logger_verbose_time=False)
 else:
@@ -34,29 +32,13 @@ else:
 scene, franka, blocks_state = create_scene_10blocks()
 
 # Strong gripper control
-franka.set_dofs_kp(
-    np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),
-)
-franka.set_dofs_kv(
-    np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),
-)
-franka.set_dofs_force_range(
-    np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),
-    np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),
-)
+franka.set_dofs_kp(np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),)
+franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
+franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),)
 
-print("=" * 80)
-print("GOAL: PENTAGON TOWER (10 BLOCKS) - TWO-PHASE TAMP PLAN")
-print("=" * 80)
+# Move to safe home position
+safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
 
-# ---------------------------------------------------------------------------
-# 2) Move robot to a safe home configuration
-# ---------------------------------------------------------------------------
-safe_home = np.array(
-    [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float
-)
-
-print("\nMoving to home...")
 current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
@@ -84,9 +66,8 @@ CENTER_X = 0.50
 CENTER_Y = 0.0
 PENTAGON_RADIUS = 0.06  # tuned to get nice pentagon
 
-
 def get_pentagon_position(index, center_x, center_y, radius, rotation_offset=0.0):
-    """Position + rotation for regular pentagon (5 vertices, 72° apart)."""
+    #Position + rotation for regular pentagon (5 vertices, 72° apart)
     angle = 0.0 + (index * 72.0) + rotation_offset
     angle_rad = math.radians(angle)
 
@@ -100,16 +81,13 @@ def get_pentagon_position(index, center_x, center_y, radius, rotation_offset=0.0
         rotation -= 360
 
     return x, y, rotation
-
 
 def get_bridge_position(index, center_x, center_y, radius, rotation_offset=36.0):
-    """Position + rotation for top pentagon blocks in between base vertices."""
+    #Position + rotation for top pentagon blocks in between base vertices
     angle = 0.0 + (index * 72.0) + rotation_offset
     angle_rad = math.radians(angle)
-
     x = center_x + radius * math.cos(angle_rad)
     y = center_y + radius * math.sin(angle_rad)
-
     rotation = angle
     while rotation < -180:
         rotation += 360
@@ -117,24 +95,21 @@ def get_bridge_position(index, center_x, center_y, radius, rotation_offset=36.0)
         rotation -= 360
 
     return x, y, rotation
-
 
 BLOCK_IDS_BASE = ["b1", "b2", "b3", "b4", "b5"]
 BLOCK_IDS_TOP = ["b6", "b7", "b8", "b9", "b10"]
 
-print("\nCalculating base pentagon positions...")
+print("\nCalculating base pentagon positions")
 BASE_SLOT_NAMES = ["base1", "base2", "base3", "base4", "base5"]
 BASE_SLOT_GEOM = {}  # slot -> (x, y, rot)
 
 for i, slot in enumerate(BASE_SLOT_NAMES):
     x, y, rot = get_pentagon_position(i, CENTER_X, CENTER_Y, PENTAGON_RADIUS, 0.0)
-
     x+=0.0045
-
     BASE_SLOT_GEOM[slot] = (x, y, rot)
-    print(f"  {slot}: angle={rot:.1f}°, pos=({x:.4f}, {y:.4f})")
+    print(f"{slot}: angle={rot:.1f}°, pos=({x:.4f}, {y:.4f})")
 
-print("\nCalculating bridged top pentagon positions...")
+print("\nCalculating bridged top pentagon positions.")
 TOP_SLOT_NAMES = ["top1", "top2", "top3", "top4", "top5"]
 TOP_SLOT_GEOM = {}
 TOP_SLOT_SUPPORT = {}  # slot -> base block id
@@ -147,43 +122,33 @@ for i, slot in enumerate(TOP_SLOT_NAMES):
 
     TOP_SLOT_GEOM[slot] = (x, y, rot)
     TOP_SLOT_SUPPORT[slot] = BLOCK_IDS_BASE[i]  # top1 over b1, etc.
-    print(f"  {slot}: angle={rot:.1f}°, pos=({x:.4f}, {y:.4f}) over {BLOCK_IDS_BASE[i]}")
-
-print("\n" + "=" * 80)
-print("GEOMETRY SUMMARY")
-print("=" * 80)
-print("Base slots (base1..5) form the ground pentagon.")
-print("Top slots (top1..5) are the rotated bridged pentagon.")
+    print(f"{slot}: angle={rot:.1f}°, pos=({x:.4f}, {y:.4f}) over {BLOCK_IDS_BASE[i]}")
 
 # Small helpers: continuous execution for base + top actions
 def place_held_block_on_base_slot(slot_name: str) -> bool:
-    """Assumes the block is already held; place at base pentagon slot."""
+    #Assumes the block is already held; place at base pentagon slot.
     if slot_name not in BASE_SLOT_GEOM:
-        print(f"[ERROR] Unknown base slot: {slot_name}")
+        print(f"Error: Unknown base slot: {slot_name}")
         return False
 
     x, y, rot = BASE_SLOT_GEOM[slot_name]
-    print(f"[EXEC] put-down-base at {slot_name} → ({x:.3f}, {y:.3f}), rot={rot:.1f}")
+    print(f"Exec: put-down-base at {slot_name} → ({x:.3f}, {y:.3f}), rot={rot:.1f}")
     return executor.put_down_sp(x=x, y=y, rotation_z=rot)
 
 
 def place_held_block_on_top_slot(slot_name: str) -> bool:
-    """Assumes the block is already held; place at bridged top slot."""
+    #Assumes the block is already held; place at bridged top slot.
     if slot_name not in TOP_SLOT_GEOM:
-        print(f"[ERROR] Unknown top slot: {slot_name}")
+        print(f"Error: Unknown top slot: {slot_name}")
         return False
 
     x, y, rot = TOP_SLOT_GEOM[slot_name]
     support_block = TOP_SLOT_SUPPORT[slot_name]
 
-    print(
-        f"[EXEC] put-down-top at {slot_name} over {support_block} "
-        f"→ ({x:.3f}, {y:.3f}), rot={rot:.1f}"
-    )
+    print(f"Exec: put-down-top at {slot_name} over {support_block} "f">({x:.3f}, {y:.3f}), rot={rot:.1f}")
 
     base_pos = executor._block_center(support_block)
     bridge_z = float(base_pos[2]) + BLOCK_SIZE
-
     hand = executor.robot.get_link("hand")
 
     # Lift high for safety
@@ -220,12 +185,12 @@ def place_held_block_on_top_slot(slot_name: str) -> bool:
             executor.robot.control_dofs_position(q)
             scene.step()
 
-    # Approach
+    # Approach 
     approach_pos = np.array([x, y, bridge_z + 0.15])
     approach_quat = executor._get_rotated_grasp_quat(rot)
     q_approach = executor._ik_for_pose(approach_pos, approach_quat)
     if q_approach is None:
-        print("[ERROR] IK failed for top approach.")
+        print("Error: IK failed for top approach.")
         return False
 
     current_q = executor.robot.get_qpos()
@@ -279,7 +244,6 @@ def place_held_block_on_top_slot(slot_name: str) -> bool:
 
     return True
 
-
 def go_home():
     current = franka.get_qpos()
     if hasattr(current, "cpu"):
@@ -289,14 +253,6 @@ def go_home():
         q = (1.0 - alpha) * current + alpha * safe_home
         franka.control_dofs_position(q)
         scene.step()
-
-# ---------------------------------------------------------------------------
-# 4) PHASE 1 – TAMP plan for BASE pentagon only
-# ---------------------------------------------------------------------------
-
-print("\n" + "=" * 80)
-print("PHASE 1: PLAN & BUILD BASE PENTAGON (b1..b5)")
-print("=" * 80)
 
 # Initial predicates + base-loc facts (NO top-loc here)
 preds_base = extract_predicates(scene, franka, blocks_state)
@@ -321,44 +277,33 @@ print("\nBASE GOAL PREDICATES:")
 for p in sorted(goal_base):
     print(" ", p)
 
-problem_base = generate_pddl_problem(
-    preds_base,
-    goal_base,
-    objects_base,
-    problem_name="pentagon_base",
-    domain_name="pentagonworld",
-)
-
-print("\nCalling Pyperplan for BASE plan...")
-plan_base = call_pyperplan(domain_file, problem_base)
+problem_base = generate_pddl_problem(preds_base,goal_base,objects_base,problem_name="pentagon_base",domain_name="pentagonworld",)
+print("\nCalling Pyperplan for BASE plan")
+plan_base = call_pyperplan_sp1(domain_file, problem_base)
 
 if not plan_base:
     print("No plan found for base pentagon.")
     sys.exit(1)
 
-print("\nBase TAMP Plan:")
+print("\nBase TAMP Plan: and Executing BASE plan")
 print(plan_to_string(plan_base))
-
-print("\nExecuting BASE plan...")
 for step_idx, (action_name, args) in enumerate(plan_base, start=1):
-    print(f"\n[BASE] Step {step_idx}: {action_name.upper()}({', '.join(args)})")
+    print(f"\nBase: Step {step_idx}: {action_name.upper()}({', '.join(args)})")
 
     success = True
 
     if action_name == "pick-up":
         success = executor.pick_up(args[0])
-
     elif action_name == "put-down-base":
-        _, slot = args  # (block, slot) – we only care about slot for geometry
+        _, slot = args  # (block, slot) - only care about slot for geometry
         success = place_held_block_on_base_slot(slot)
-
     else:
         # No put-down-top here because there are no TOP-LOC facts in Phase 1
-        print(f"[BASE] Unknown / unsupported action '{action_name}' – skipping.")
+        print(f"Base: Unknown / unsupported action '{action_name}' - skipping.")
         success = True
 
     if not success:
-        print(f"[BASE] ERROR executing {action_name}, aborting.")
+        print(f"Base: ERROR executing {action_name}, aborting.")
         sys.exit(1)
 
     for _ in range(60):
@@ -368,20 +313,15 @@ for step_idx, (action_name, args) in enumerate(plan_base, start=1):
     if "HANDEMPTY()" in preds_after:
         go_home()
 
-print("\n✓ PHASE 1 COMPLETE – BASE PENTAGON BUILT")
+print("\nPHASE 1 COMPLETE - BASE PENTAGON BUILT")
 
 # Let things settle
 for _ in range(150):
     scene.step()
 
-# ---------------------------------------------------------------------------
-# 5) PHASE 2 – TAMP plan for TOP pentagon only
-# ---------------------------------------------------------------------------
+# Then Phase 2: build the top pentagon
 
-print("\n" + "=" * 80)
-print("PHASE 2: PLAN & BUILD TOP PENTAGON (b6..b10)")
-print("=" * 80)
-
+print("Building TOP pentagon now.")
 preds_top = extract_predicates(scene, franka, blocks_state)
 print("\nPredicates before Phase 2:")
 print_predicates(preds_top)
@@ -416,7 +356,7 @@ problem_top = generate_pddl_problem(
 )
 
 print("\nCalling Pyperplan for TOP plan...")
-plan_top = call_pyperplan(domain_file, problem_top)
+plan_top = call_pyperplan_sp1(domain_file, problem_top)
 
 if not plan_top:
     print("No plan found for top pentagon.")
@@ -425,9 +365,9 @@ if not plan_top:
 print("\nTop TAMP Plan:")
 print(plan_to_string(plan_top))
 
-print("\nExecuting TOP plan...")
+print("\nExecuting TOP plan")
 for step_idx, (action_name, args) in enumerate(plan_top, start=1):
-    print(f"\n[TOP] Step {step_idx}: {action_name.upper()}({', '.join(args)})")
+    print(f"\nTop: Step {step_idx}: {action_name.upper()}({', '.join(args)})")
 
     success = True
 
@@ -444,11 +384,11 @@ for step_idx, (action_name, args) in enumerate(plan_top, start=1):
         success = place_held_block_on_top_slot(slot)
 
     else:
-        print(f"[TOP] Unknown / unsupported action '{action_name}' – skipping.")
+        print(f"Top: Unknown / unsupported action '{action_name}' - skipping.")
         success = True
 
     if not success:
-        print(f"[TOP] ERROR executing {action_name}, aborting.")
+        print(f"Top: ERROR executing {action_name}, aborting.")
         sys.exit(1)
 
     for _ in range(60):
@@ -458,16 +398,9 @@ for step_idx, (action_name, args) in enumerate(plan_top, start=1):
     if "HANDEMPTY()" in preds_after:
         go_home()
 
-print("\n✓ PHASE 2 COMPLETE – TOP PENTAGON BUILT")
+print("\nPHASE 2 COMPLETE - TOP PENTAGON BUILT")
 
-# ---------------------------------------------------------------------------
-# 6) FINAL VERIFICATION (base + top)
-# ---------------------------------------------------------------------------
-
-print("\n" + "=" * 80)
-print("FINAL VERIFICATION")
-print("=" * 80)
-
+#Final verification
 for _ in range(150):
     scene.step()
 
@@ -478,17 +411,15 @@ print_predicates(final_preds)
 full_goal = set(goal_base) | set(goal_top)
 
 if full_goal.issubset(final_preds):
-    print("=" * 80)
-    print("SUCCESS! PENTAGON TOWER COMPLETE (TWO-PHASE TAMP)!")
-    print("=" * 80)
+    print("Full symbolic goal successfully achieved!")
 else:
     print("Full symbolic goal not completely satisfied.")
     missing = full_goal - final_preds
     print("\nMissing predicates:", missing)
 
-print("\Viewing final result. Press Ctrl+C to exit...")
+print("\n Ctrl+C to exit")
 try:
     while True:
         scene.step()
 except KeyboardInterrupt:
-    print("\nExiting...")
+    print("\nExiting Simulation.")

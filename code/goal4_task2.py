@@ -8,20 +8,17 @@ import numpy as np
 import genesis as gs
 
 from scenes import create_scene_3red_3green
-from motion_primitives_sp2 import MotionPrimitiveExecutor
-from predicates_adjacent_sp2 import extract_predicates_directional as extract_predicates_with_adjacency, print_predicates
-from task_planner_sp2 import generate_pddl_problem, call_pyperplan, plan_to_string
-
+from motion_primitives import MotionPrimitiveExecutor
+from predicates import extract_predicates_directional as extract_predicates_with_adjacency, print_predicates_sp2
+from task_planner import generate_pddl_problem_sp2, call_pyperplan_sp2, plan_to_string
 
 BLOCK_SIZE = 0.04  # 4cm blocks
 
-
 def get_adjacent_blocks_info(block_id: str, blocks_state: dict) -> dict:
     """
-    Determine which blocks are adjacent and in which directions.
-    
+    It Determines which blocks are adjacent and in which directions.
     Returns:
-        dict: {'+x': block_name, '-x': block_name, '+y': block_name, '-y': block_name}
+    dict: {'+x': block_name, '-x': block_name, '+y': block_name, '-y': block_name}
     """
     if block_id not in blocks_state:
         return {}
@@ -63,16 +60,14 @@ def get_adjacent_blocks_info(block_id: str, blocks_state: dict) -> dict:
 
 
 def calculate_gripper_rotation(adjacent_blocks: dict) -> float:
-    """
-    Calculate gripper wrist rotation to avoid collisions.
-    
+    """    
     LOGIC:
-    - Default gripper (0°): Fingers extend in Y direction
-    - If blocks adjacent in Y direction (+y or -y): Rotate 90° → fingers point in X
-    - If blocks adjacent in X direction (+x or -x): Keep 0° → fingers stay in Y
+    Default gripper (0°): Fingers extend in Y direction
+    If blocks adjacent in Y direction (+y or -y): Rotate 90° > fingers point in X
+    If blocks adjacent in X direction (+x or -x): Keep 0° > fingers stay in Y
     
     Returns:
-        float: Wrist rotation in radians (0 or π/2)
+    float: Wrist rotation in radians (0 or π/2)
     """
     if not adjacent_blocks:
         return 0.0  # Default orientation
@@ -96,27 +91,14 @@ else:
 scene, franka, blocks_state = create_scene_3red_3green()
 
 # Strong gripper control
-franka.set_dofs_kp(
-    np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),
-)
-franka.set_dofs_kv(
-    np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),
-)
-franka.set_dofs_force_range(
-    np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),
-    np.array([ 87,  87,  87,  87,  12,  12,  12,  200,  200]),
-)
-
-print("=" * 80)
-print("DIRECTIONAL ADJACENCY TAMP: Precise X/Y Placement")
-print("=" * 80)
+franka.set_dofs_kp(np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),)
+franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
+franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([ 87,  87,  87,  87,  12,  12,  12,  200,  200]),)
 
 # Move to home
-safe_home = np.array(
-    [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float
-)
+safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
 
-print("\nMoving to home...")
+print("\nMoving to home")
 current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
@@ -169,10 +151,6 @@ for p in sorted(phase1_goal):
 
 phase1_blocks = ["r1", "g1", "r2", "g2"]
 
-# ============================================================================
-# PHASE 1: PLAN ONCE AND EXECUTE
-# ============================================================================
-
 MAX_REPLAN_ATTEMPTS = 3
 replan_attempt = 0
 
@@ -191,17 +169,17 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
                           or p == "HANDEMPTY()"}
     
     print("\nInitial state:")
-    print_predicates(relevant_predicates)
+    print_predicates_sp2(relevant_predicates)
 
     # Check if goal already satisfied
     if phase1_goal.issubset(current_predicates):
-        print("\n🎉 PHASE 1 ALREADY COMPLETE!")
+        print("\n PHASE 1 ALREADY COMPLETE!")
         break
 
     # PLANNING
     print("\n[Planning] Generating complete plan for Phase 1...")
     
-    problem_string = generate_pddl_problem(
+    problem_string = generate_pddl_problem_sp2(
         relevant_predicates,
         phase1_goal,
         phase1_blocks,
@@ -214,13 +192,13 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         f.write(problem_string)
     print(f"  Problem saved to: {debug_problem_file}")
 
-    plan = call_pyperplan(domain_file, problem_string)
+    plan = call_pyperplan_sp2(domain_file, problem_string)
 
     if not plan:
-        print("❌ No plan found for Phase 1!")
+        print("No plan found for Phase 1!")
         break
 
-    print(f"\n✓ Complete plan generated with {len(plan)} actions")
+    print(f"\n Complete plan generated with {len(plan)} actions")
     print("\n" + "="*60)
     print("PHASE 1 COMPLETE PLAN:")
     print("="*60)
@@ -242,19 +220,19 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
 
         if action_name == "pick-up":
             block_id = args[0]
-            print(f"  → Picking up block '{block_id}'")
+            print(f"Picking up block '{block_id}'")
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
-                print(f"  ℹ️  Adjacent blocks: {adjacent}")
+                print(f"Adjacent blocks: {adjacent}")
                 wrist_rotation = calculate_gripper_rotation(adjacent)
-                print(f"  ℹ️  Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
-                success = executor.pick_up(block_id, wrist_rotation=wrist_rotation)
+                print(f" Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
+                success = executor.pick_up_sp(block_id, wrist_rotation=wrist_rotation)
             else:
                 success = executor.pick_up(block_id)
 
         elif action_name == "put-down":
-            print(f"  → Putting down held block on table")
+            print(f"Putting down held block on table")
             success = executor.put_down()
 
         elif action_name == "put-down-adjacent":
@@ -283,24 +261,24 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
-                print(f"  ℹ️  Adjacent blocks: {adjacent}")
+                print(f" Adjacent blocks: {adjacent}")
                 wrist_rotation = calculate_gripper_rotation(adjacent)
-                print(f"  ℹ️  Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
-                success = executor.pick_up(block_id, wrist_rotation=wrist_rotation)
+                print(f" Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
+                success = executor.pick_up_sp(block_id, wrist_rotation=wrist_rotation)
             else:
                 success = executor.pick_up(block_id)
 
         else:
-            print(f"  ❌ Unknown action: {action_name}")
+            print(f"Unknown action: {action_name}")
             plan_success = False
             break
 
         if not success:
-            print(f"  ❌ Action FAILED!")
+            print(f" Action FAILED!")
             plan_success = False
             break
         else:
-            print(f"  ✓ Action completed successfully")
+            print(f"Action completed successfully")
 
         # Settle physics
         for _ in range(200):
@@ -309,7 +287,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         # **NEW: Check if goal already satisfied after this action**
         current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
         if phase1_goal.issubset(current_predicates):
-            print(f"\n✅ GOAL ACHIEVED after action {action_idx}/{len(plan)}! Skipping remaining actions.")
+            print(f"\nGOAL ACHIEVED after action {action_idx}/{len(plan)}! Skipping remaining actions.")
             break
 
         for _ in range(200):
@@ -326,19 +304,19 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
     final_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
     
     if phase1_goal.issubset(final_predicates):
-        print("✅ PHASE 1 GOAL ACHIEVED!")
+        print("PHASE 1 GOAL ACHIEVED!")
         break
     else:
-        print("⚠️  Phase 1 goal not fully satisfied")
+        print("Phase 1 goal not fully satisfied")
         missing = phase1_goal - final_predicates
         print(f"\nMissing predicates ({len(missing)}):")
         for p in sorted(missing):
             print(f"  {p}")
         
         if replan_attempt < MAX_REPLAN_ATTEMPTS:
-            print(f"\n🔄 Replanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})...")
+            print(f"\nReplanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})...")
         else:
-            print("\n❌ Max replan attempts reached")
+            print("\nMax replan attempts reached")
             break
 
 
@@ -350,24 +328,19 @@ print("=" * 80)
 phase1_final = extract_predicates_with_adjacency(scene, franka, blocks_state)
 
 if not phase1_goal.issubset(phase1_final):
-    print("❌ Phase 1 FAILED - base not properly constructed")
+    print("Phase 1 FAILED - base not properly constructed")
     print("\nMissing predicates:")
     missing = phase1_goal - phase1_final
     for p in sorted(missing):
         print(f"  {p}")
     sys.exit(1)
 
-print("✅ Phase 1 SUCCESS - Base is complete!")
+print("Phase 1 SUCCESS - Base is complete!")
 
 print("\nBase block positions:")
 for block in phase1_blocks:
     pos = blocks_state[block].get_pos()
     print(f"  {block}: ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})")
-
-
-# ============================================================================
-# PHASE 2: STACKING
-# ============================================================================
 
 print("\n" + "=" * 80)
 print("PHASE 2: STACKING")
@@ -407,16 +380,16 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
     current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
     
     print("\nInitial state:")
-    print_predicates(current_predicates)
+    print_predicates_sp2(current_predicates)
 
     if phase2_goal.issubset(current_predicates):
-        print("\n🎉 PHASE 2 ALREADY COMPLETE!")
+        print("\nPHASE 2 ALREADY COMPLETE!")
         break
 
     # PLANNING
     print("\n[Planning] Generating complete plan for Phase 2...")
     
-    problem_string = generate_pddl_problem(
+    problem_string = generate_pddl_problem_sp2(
         current_predicates,
         phase2_goal,
         phase2_blocks,
@@ -429,10 +402,10 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         f.write(problem_string)
     print(f"  Problem saved to: {debug_problem_file}")
 
-    plan = call_pyperplan(domain_file, problem_string)
+    plan = call_pyperplan_sp2(domain_file, problem_string)
 
     if not plan:
-        print("❌ No plan found for Phase 2!")
+        print("No plan found for Phase 2!")
         break
 
     print(f"\n✓ Complete plan generated with {len(plan)} actions")
@@ -461,10 +434,10 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
-                print(f"  ℹ️  Adjacent blocks: {adjacent}")
+                print(f"Adjacent blocks: {adjacent}")
                 wrist_rotation = calculate_gripper_rotation(adjacent)
-                print(f"  ℹ️  Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
-                success = executor.pick_up(block_id, wrist_rotation=wrist_rotation)
+                print(f"Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
+                success = executor.pick_up_sp(block_id, wrist_rotation=wrist_rotation)
             else:
                 success = executor.pick_up(block_id)
 
@@ -491,7 +464,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             
             adjacent = get_adjacent_blocks_info(target_id, blocks_state)
             if adjacent:
-                print(f"  ℹ️  Blocks around target '{target_id}': {adjacent}")
+                print(f" Blocks around target '{target_id}': {adjacent}")
             
             success = executor.stack_on(target_id, current_predicates)
 
@@ -502,24 +475,24 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
-                print(f"  ℹ️  Adjacent blocks: {adjacent}")
+                print(f"Adjacent blocks: {adjacent}")
                 wrist_rotation = calculate_gripper_rotation(adjacent)
-                print(f"  ℹ️  Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
-                success = executor.pick_up(block_id, wrist_rotation=wrist_rotation)
+                print(f"Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
+                success = executor.pick_up_sp(block_id, wrist_rotation=wrist_rotation)
             else:
                 success = executor.pick_up(block_id)
 
         else:
-            print(f"  ❌ Unknown action: {action_name}")
+            print(f"Unknown action: {action_name}")
             plan_success = False
             break
 
         if not success:
-            print(f"  ❌ Action FAILED!")
+            print(f"Action FAILED!")
             plan_success = False
             break
         else:
-            print(f"  ✓ Action completed successfully")
+            print(f"Action completed successfully")
 
         # Settle physics
         for _ in range(100):
@@ -528,7 +501,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         # **NEW: Check if goal already satisfied after this action**
         current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
         if phase2_goal.issubset(current_predicates):
-            print(f"\n✅ GOAL ACHIEVED after action {action_idx}/{len(plan)}! Skipping remaining actions.")
+            print(f"\nGOAL ACHIEVED after action {action_idx}/{len(plan)}! Skipping remaining actions.")
             break
 
         for _ in range(100):
@@ -545,19 +518,19 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
     final_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
     
     if phase2_goal.issubset(final_predicates):
-        print("✅ PHASE 2 GOAL ACHIEVED!")
+        print("PHASE 2 GOAL ACHIEVED!")
         break
     else:
-        print("⚠️  Phase 2 goal not fully satisfied")
+        print("Phase 2 goal not fully satisfied")
         missing = phase2_goal - final_predicates
         print(f"\nMissing predicates ({len(missing)}):")
         for p in sorted(missing):
             print(f"  {p}")
         
         if replan_attempt < MAX_REPLAN_ATTEMPTS:
-            print(f"\n🔄 Replanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})...")
+            print(f"\n Replanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})...")
         else:
-            print("\n❌ Max replan attempts reached")
+            print("\nMax replan attempts reached")
             break
 
 
@@ -574,11 +547,11 @@ for _ in range(100):
 
 final_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
 print("\nFinal State:")
-print_predicates(final_predicates)
+print_predicates_sp2(final_predicates)
 
 if phase2_goal.issubset(final_predicates):
     print("=" * 80)
-    print("🎉 SUCCESS! DIRECTIONAL ADJACENCY TAMP COMPLETE!")
+    print("SUCCESS! DIRECTIONAL ADJACENCY TAMP COMPLETE!")
     print("=" * 80)
     print("\nFinal structure:")
     print("  [r3] [g3]         ← Top layer (stacked)")
@@ -587,14 +560,14 @@ if phase2_goal.issubset(final_predicates):
     print("\nAll blocks positioned correctly with precise directional placement!")
 else:
     print("=" * 80)
-    print("❌ GOAL NOT ACHIEVED")
+    print("GOAL NOT ACHIEVED")
     print("=" * 80)
     print("\nMissing predicates:")
     missing = phase2_goal - final_predicates
     for p in sorted(missing):
         print(f"  {p}")
 
-print("\n👀 Viewing final result. Press Ctrl+C to exit...")
+print("\nViewing final result. Press Ctrl+C to exit...")
 try:
     while True:
         scene.step()
