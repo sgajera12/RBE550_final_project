@@ -79,7 +79,7 @@ for p in sorted(goal_predicates):
 
 # TAMP EXECUTION LOOP
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
-domain_file = "/home/pinaka/RBE550Final/RBE550_final_project/code/blocksworld.pddl"
+domain_file = "blocksworld.pddl"
 max_iterations = 30  # More iterations needed for stacked scenario
 iteration = 0
 

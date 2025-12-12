@@ -30,25 +30,15 @@ def generate_pddl_problem(predicates: Set[str],goal_predicates: Set[str],blocks:
     problem = f"""(define (problem {problem_name}) (:domain blocksworld) (:objects {' '.join(blocks)}) (:init {init_preds}) (:goal (and {goal_preds})))"""
     return problem
 
-def generate_pddl_problem_sp1(
-    predicates: Set[str],
-    goal_predicates: Set[str],
-    objects: List[str],
-    problem_name: str = "blocks_problem",
-    domain_name: str = "blocksworld",
-) -> str:
+def generate_pddl_problem_sp1(predicates: Set[str],goal_predicates: Set[str],objects: List[str],problem_name: str = "blocks_problem",domain_name: str = "blocksworld",) -> str:
     """
     Generate a PDDL problem file string from predicates.
-
     Args:
         predicates:      Current state predicates (INIT).
         goal_predicates: Goal state predicates.
         objects:         List of *all* PDDL objects (blocks, slots, etc.).
         problem_name:    Name of the problem.
-        domain_name:     Name of the domain, must match (define (domain ...))
-                         in your .pddl domain file (e.g. 'blocksworld' or
-                         'pentagonworld').
-
+        domain_name:     Name of the domain, must match (define (domain ..)) .pddl domain file (e.g. 'blocksworld' or 'pentagonworld').
     Returns:
         A PDDL problem file as a string.
     """
@@ -70,22 +60,7 @@ def generate_pddl_problem_sp1(
     init_preds = "\n    ".join([format_pred(p) for p in predicates])
     goal_preds = "\n      ".join([format_pred(p) for p in goal_predicates])
 
-    problem = f"""(define (problem {problem_name})
-  (:domain {domain_name})
-
-  (:objects {' '.join(objects)})
-
-  (:init
-    {init_preds}
-  )
-
-  (:goal
-    (and
-      {goal_preds}
-    )
-  )
-)
-"""
+    problem = f"""(define (problem {problem_name}) (:domain {domain_name}) (:objects {' '.join(objects)}) (:init{init_preds}) (:goal(and{goal_preds})))"""
     return problem
 
 def generate_pddl_problem_sp2(
@@ -117,22 +92,7 @@ def generate_pddl_problem_sp2(
     # FIXED: Declare objects with type
     typed_objects = ' '.join([f"{block} - block" for block in blocks])
 
-    problem = f"""(define (problem {problem_name})
-  (:domain {domain_name})
-
-  (:objects {typed_objects})
-
-  (:init
-    {init_preds}
-  )
-
-  (:goal
-    (and
-      {goal_preds}
-    )
-  )
-)
-"""
+    problem = f"""(define (problem {problem_name})(:domain {domain_name}) (:objects {typed_objects}) (:init {init_preds})(:goal(and{goal_preds})))"""
     return problem
 
 
@@ -206,7 +166,6 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
 def call_pyperplan_sp1(domain_file: str, problem_string: str) -> List[Tuple[str, List[str]]]:
     """
     Call Pyperplan to solve planning problem.
-
     Returns:
         List of (action_name, [args]) tuples representing the plan.
     """
@@ -217,13 +176,11 @@ def call_pyperplan_sp1(domain_file: str, problem_string: str) -> List[Tuple[str,
         f.write(problem_string)
 
     try:
-        print(f"  Domain: {domain_file}")
-        print(f"  Problem: {problem_file}")
+        print(f"Domain: {domain_file}")
+        print(f"Problem: {problem_file}")
 
-        # ------------------------------------------------------------------
-        # Prefer the 'pyperplan' CLI if available, otherwise use python -m.
+        # Prefer the 'pyperplan' CLI if available, otherwise we use python -m.
         # Use heuristic search (A* with hadd) instead of plain BFS.
-        # ------------------------------------------------------------------
         search_args = ["-H", "hadd", "-s", "astar"]
 
         cli_path = shutil.which("pyperplan")
@@ -243,22 +200,19 @@ def call_pyperplan_sp1(domain_file: str, problem_string: str) -> List[Tuple[str,
             timeout=60,
         )
 
-        print("\n--- Pyperplan STDOUT ---")
+        print("\nPyperplan STDOUT")
         print(result.stdout)
-        print("--- End STDOUT ---\n")
+        print("End STDOUT\n")
 
         if result.stderr.strip():
-            print("--- Pyperplan STDERR ---")
+            print("Pyperplan STDERR ")
             print(result.stderr)
-            print("--- End STDERR ---\n")
+            print("End STDERR \n")
 
         if result.returncode != 0:
             print("Pyperplan failed!")
             return []
-
-        # ------------------------------------------------------------------
-        # 1) Try the classic .soln file first (old behaviour).
-        # ------------------------------------------------------------------
+        
         solution_file = problem_file + ".soln"
         plan: List[Tuple[str, List[str]]] = []
 
@@ -275,10 +229,8 @@ def call_pyperplan_sp1(domain_file: str, problem_string: str) -> List[Tuple[str,
                             plan.append((action_name, args))
             os.remove(solution_file)
 
-        # ------------------------------------------------------------------
-        # 2) If no .soln file, fall back to parsing stdout/stderr directly.
-        #    Newer pyperplan versions sometimes just print the plan.
-        # ------------------------------------------------------------------
+        # 2.If no .soln file, fall back to parsing stdout/stderr directly.
+        # Newer pyperplan versions sometimes just print the plan.
         if not plan:
             combined = (result.stdout or "") + "\n" + (result.stderr or "")
             for line in combined.splitlines():
@@ -288,7 +240,7 @@ def call_pyperplan_sp1(domain_file: str, problem_string: str) -> List[Tuple[str,
                     start = line.find("(")
                     end = line.find(")", start)
                     if start != -1 and end != -1:
-                        inner = line[start + 1 : end]  # without parentheses
+                        inner = line[start + 1 : end]
                         parts = inner.split()
                         if parts:
                             action_name = parts[0]
@@ -308,7 +260,6 @@ def call_pyperplan_sp1(domain_file: str, problem_string: str) -> List[Tuple[str,
 def call_pyperplan_sp2(domain_file: str, problem_string: str) -> List[Tuple[str, List[str]]]:
     """
     Call Pyperplan to solve planning problem with A* and heuristic.
-
     Returns:
         List of (action_name, [args])
     """
@@ -318,8 +269,8 @@ def call_pyperplan_sp2(domain_file: str, problem_string: str) -> List[Tuple[str,
         f.write(problem_string)
 
     try:
-        print(f"  Domain: {domain_file}")
-        print(f"  Problem: {problem_file}")
+        print(f"Domain: {domain_file}")
+        print(f"Problem: {problem_file}")
 
         cli_path = shutil.which("pyperplan")
         if cli_path is not None:
@@ -336,14 +287,14 @@ def call_pyperplan_sp2(domain_file: str, problem_string: str) -> List[Tuple[str,
             timeout=60
         )
 
-        print("\n--- Pyperplan STDOUT ---")
+        print("\n Pyperplan STDOUT")
         print(result.stdout)
-        print("--- End STDOUT ---\n")
+        print("End STDOUT \n")
 
         if result.stderr.strip():
-            print("--- Pyperplan STDERR ---")
+            print("Pyperplan STDERR")
             print(result.stderr)
-            print("--- End STDERR ---\n")
+            print("End STDERR\n")
 
         if result.returncode != 0:
             print("Pyperplan failed!")

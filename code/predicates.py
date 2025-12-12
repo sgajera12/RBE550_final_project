@@ -17,10 +17,10 @@ TABLE_Z = 0.02
 STACK_TOLERANCE = 0.015
 XY_TOLERANCE = 0.02
 # Directional adjacency thresholds
-MIN_ADJACENT_DIST = BLOCK_SIZE * 0.85   # 3.4cm
-MAX_ADJACENT_DIST = BLOCK_SIZE * 1.4    # 5.6cm
-LAYER_TOLERANCE = 0.025  # 2.5cm - blocks at similar Z are same layer
-DEBUG_ADJACENCY = True  # Set to False to hide debug output
+MIN_ADJACENT_DIST = BLOCK_SIZE * 0.85 # 3.4cm
+MAX_ADJACENT_DIST = BLOCK_SIZE * 1.4 # 5.6cm
+LAYER_TOLERANCE = 0.025# 2.5cm - blocks at similar Z are same layer
+DEBUG_ADJACENCY = True # Set to False to hide debug output
 
 
 def extract_predicates(scene: Any, franka: Any, blocks_state: Dict[str, Any]) -> Set[str]:
@@ -184,7 +184,7 @@ def extract_predicates_directional(scene: Any, robot: Any, blocks_state: Dict[st
                 if MIN_ADJACENT_DIST < dist < MAX_ADJACENT_DIST:
                     predicates.add(f"ADJACENT-X({block_a},{block_b})")
                     if DEBUG_ADJACENCY:
-                        print(f"  ✓ ADJACENT-X({block_a},{block_b}): {block_a} is {dist*100:.1f}cm to the RIGHT of {block_b}")
+                        print(f"ADJACENT-X({block_a},{block_b}): {block_a} is {dist*100:.1f}cm to the RIGHT of {block_b}")
             
             # ADJACENT-Y: 'a' is in FRONT of 'b' (+Y direction)
             # Conditions: dy > 0 (a is front of b), dx ≈ 0 (same X), distance is ~1 block
@@ -193,17 +193,13 @@ def extract_predicates_directional(scene: Any, robot: Any, blocks_state: Dict[st
                 if MIN_ADJACENT_DIST < dist < MAX_ADJACENT_DIST:
                     predicates.add(f"ADJACENT-Y({block_a},{block_b})")
                     if DEBUG_ADJACENCY:
-                        print(f"  ✓ ADJACENT-Y({block_a},{block_b}): {block_a} is {dist*100:.1f}cm in FRONT of {block_b}")
+                        print(f"ADJACENT-Y({block_a},{block_b}): {block_a} is {dist*100:.1f}cm in FRONT of {block_b}")
     
     return predicates
 
 
 def print_predicates_sp2(predicates: Set[str]) -> None:
-    """Pretty print predicates organized by type."""
-    
-    print("\n" + "=" * 60)
-    print("PREDICATES:")
-    print("=" * 60)
+    """ predicates organized by type."""
     
     # Separate by type
     on_preds = sorted([p for p in predicates if p.startswith("ON(")])
@@ -217,41 +213,41 @@ def print_predicates_sp2(predicates: Set[str]) -> None:
     if on_preds:
         print("\nStacked:")
         for p in on_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if ontable_preds:
         print("\nOn table:")
         for p in ontable_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if adjacent_x_preds:
         print("\nAdjacent-X (horizontal, +X to the right):")
         for p in adjacent_x_preds:
-            inside = p[11:-1]  # Remove ADJACENT-X( and )
+            inside = p[11:-1]
             a, b = inside.split(",")
-            print(f"  {a} → {b}  ({a} is RIGHT of {b})")
+            print(f"{a} > {b}  ({a} is RIGHT of {b})")
     
     if adjacent_y_preds:
         print("\nAdjacent-Y (vertical, +Y in front):")
         for p in adjacent_y_preds:
-            inside = p[11:-1]  # Remove ADJACENT-Y( and )
+            inside = p[11:-1] 
             a, b = inside.split(",")
-            print(f"  {a} → {b}  ({a} is FRONT of {b})")
+            print(f"{a} > {b}  ({a} is FRONT of {b})")
     
     if clear_preds:
         print("\nClear:")
         for p in clear_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if holding_preds:
         print("\nGripper:")
         for p in holding_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if handempty_preds:
         print("\nGripper:")
         for p in handempty_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     print("=" * 60 + "\n")
 
@@ -266,25 +262,25 @@ def print_predicates(predicates: Set[str]) -> None:
     if on_preds:
         print("\nStacked:")
         for p in on_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if ontable_preds:
         print("\nOn table:")
         for p in ontable_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if clear_preds:
         print("\nClear:")
         for p in clear_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if holding_preds:
         print("\nHolding:")
         for p in holding_preds:
-            print(f"  {p}")
+            print(f"{p}")
     
     if handempty_preds:
         print("\nGripper:")
         for p in handempty_preds:
-            print(f"  {p}")
+            print(f"{p}")
     

@@ -78,12 +78,10 @@ class MotionPrimitiveExecutor:
     def _calculate_rotated_quaternion(self, wrist_rotation: float) -> np.ndarray:
             """
             Calculate gripper quaternion with wrist rotation.
-            
             Args:
-                wrist_rotation: Rotation around Z-axis in radians
-                
+            wrist_rotation: Rotation around Z-axis in radians
             Returns:
-                Quaternion [w, x, y, z] for gripper orientation
+            Quaternion [w, x, y, z] for gripper orientation
             """
             # Base quaternion: gripper pointing down [w, x, y, z]
             # [0, 1, 0, 0] = gripper pointing down, fingers in default orientation
@@ -116,12 +114,10 @@ class MotionPrimitiveExecutor:
     # Get rotated grasp quaternion for sp1
     def _get_rotated_grasp_quat(self, rotation_z_degrees: float) -> np.ndarray:
         """Get grasp quaternion with Z-axis rotation applied.
-        
         Args:
-            rotation_z_degrees: Rotation around Z-axis in degrees
-            
+        rotation_z_degrees: Rotation around Z-axis in degrees
         Returns:
-            Quaternion [w, x, y, z]
+        Quaternion [w, x, y, z]
         """
         # Base grasp orientation (gripper pointing down)
         # Roll=0, Pitch=180° (pointing down), Yaw=rotation_z
@@ -146,7 +142,7 @@ class MotionPrimitiveExecutor:
         
         for attempt in range(retries):
             path = self.planner.plan_path(qpos_goal=q_goal,num_waypoints=self.config.num_waypoints,attached_object=attached_object,timeout=10.0,)
-            
+        
             if path:
                 break
             
@@ -311,7 +307,7 @@ class MotionPrimitiveExecutor:
         center = self._block_center(key)
 
         if abs(wrist_rotation) > 0.01:
-            print(f"\nmotion: PICK-UP: '{key}' with {np.degrees(wrist_rotation):.0f}° wrist rotation")
+            print(f"\nmotion: PICK-UP: '{key}' with {np.degrees(wrist_rotation):.0f}deg wrist rotation")
         else:
             print(f"\nmotion: PICK-UP: '{key}'")
 
@@ -439,14 +435,12 @@ class MotionPrimitiveExecutor:
     # Put down with rotation for sp1
     def put_down_sp(self, x: float = 0.50, y: float = 0.0, rotation_z: float = 0.0) -> bool:
         """Place held block on table at position (x, y) with optional Z-axis rotation.
-        
         Args:
             x: X position (default: 0.50)
             y: Y position (default: 0.0)
             rotation_z: Rotation around Z-axis in degrees (default: 0.0)
-                       0° = aligned with robot base
-                       Positive = counter-clockwise when viewed from above
-        
+            0 = aligned with robot base
+            Positive = counter-clockwise when viewed from above
         Returns:
             bool: True if successful
         """
@@ -524,7 +518,7 @@ class MotionPrimitiveExecutor:
                 start_q = np.array(current_q, dtype=float, copy=True)
             
             for i in range(30):
-                alpha = (i + 1) / 30.0
+                alpha = (i + 1)/30.0
                 q = (1 - alpha) * start_q + alpha * q_up
                 self.robot.control_dofs_position(q)
                 self.scene.step()
@@ -536,14 +530,11 @@ class MotionPrimitiveExecutor:
     def put_down_adjacent_to(self, reference_block_id: str, predicates: set) -> bool:
         """
         Place held block adjacent to a reference block.
-        
         Intelligently calculates placement position to be ~4cm away from reference block.
         Considers existing adjacent blocks to place in an empty spot.
-        
         Args:
-            reference_block_id: Block to place adjacent to
-            predicates: Current predicates to understand existing configuration
-            
+        reference_block_id: Block to place adjacent to
+        predicates: Current predicates to understand existing configuration
         Returns:
             bool: Success status
         """
@@ -622,7 +613,7 @@ class MotionPrimitiveExecutor:
         success = self.put_down(x=target_x, y=target_y)
         
         if success:
-            print(f"motion: ✓ Successfully placed adjacent to '{ref_key}'")
+            print(f"motion:Successfully placed adjacent to '{ref_key}'")
         
         return success
 

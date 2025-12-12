@@ -92,7 +92,7 @@ print(f"\nBase block: {base_block.upper()}, Remaining blocks will be added incre
 
 # TAMP EXECUTION LOOP
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
-domain_file = "/home/pinaka/RBE550Final/RBE550_final_project/code/blocksworld.pddl"
+domain_file = "blocksworld.pddl"
 max_iterations = 60  # More iterations for incremental building
 iteration = 0
 

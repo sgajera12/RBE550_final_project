@@ -1,6 +1,4 @@
 """
-pentagon_geometry.py
-
 Calculates pentagon geometry for Goal 4
 - Virtual pentagon at center
 - Edge positions and normals
@@ -21,7 +19,7 @@ PENTAGON_EDGE_LENGTH = BLOCK_SIZE + 0.005  # 4.5cm
 
 # Calculate pentagon geometry
 # For regular pentagon with edge length L:
-# Apothem (center to edge midpoint) = L / (2 * tan(36°))
+# Apothem (center to edge midpoint) = L / (2 * tan(36))
 APOTHEM = PENTAGON_EDGE_LENGTH / (2 * math.tan(math.radians(36)))
 print(f"Pentagon apothem: {APOTHEM:.4f}m ({APOTHEM*100:.2f}cm)")
 
@@ -87,13 +85,10 @@ class PentagonEdge:
     def get_block_placement_position(self, layer=1):
         """
         Get the position where block center should be placed
-        
         For layer 1: Block sits ON the edge (outside pentagon)
         For layer 2: Block sits BETWEEN two layer 1 blocks (above)
-        
         Args:
             layer: 1 for base layer, 2 for top layer
-            
         Returns:
             np.array [x, y, z] position for block center
         """
@@ -139,22 +134,18 @@ class PentagonEdge:
     def get_block_rotation(self, layer=1):
         """
         Get the rotation angle for block placement
-        
         Mathematical approach:
-        - All blocks start at 0° (1st side facing camera/user)
-        - edge1 (normal=90°, top) needs 0° rotation (1st side on edge)
+        - All blocks start at 0 (1st side facing camera/user)
+        - edge1 (normal=90, top) needs 0 rotation (1st side on edge)
         - Other edges: rotate relative to edge1
-        
-        Formula: rotation = -(normal_angle - 90°) = 90° - normal_angle
-        
+        Formula: rotation = -(normal_angle - 90) = 90 - normal_angle
         Args:
-            layer: 1 or 2
-            
+        layer: 1 or 2
         Returns:
-            float: rotation angle in degrees (for robot wrist joint)
+        float: rotation angle in degrees (for robot wrist joint)
         """
         if layer == 1:
-            # Reference: edge1 (normal=90°) uses 0° rotation
+            # Reference: edge1 (normal=90) uses 0 rotation
             # Other edges rotate relative to this
             rotation = (90 - self.normal_angle) % 360
             return rotation
@@ -163,9 +154,8 @@ class PentagonEdge:
             # Layer 2 blocks face the same way as their position angle
             next_edge_number = (self.number % 5) + 1
             next_edge = PentagonEdge(next_edge_number)
-            
             angle_between = (self.normal_angle + next_edge.normal_angle) / 2.0
-            
+
             if abs(self.normal_angle - next_edge.normal_angle) > 180:
                 angle_between = ((self.normal_angle + next_edge.normal_angle) / 2.0 + 180) % 360
             
@@ -195,32 +185,24 @@ def get_edge_by_name(edge_name):
 
 
 def print_pentagon_geometry():
-    """Print detailed pentagon geometry information"""
-    print("\n" + "="*70)
+    # To print 
     print("PENTAGON GEOMETRY")
-    print("="*70)
-    
     print(f"\nCenter: ({PENTAGON_CENTER[0]:.3f}, {PENTAGON_CENTER[1]:.3f}, {PENTAGON_CENTER[2]:.3f})")
     print(f"Edge length: {PENTAGON_EDGE_LENGTH:.4f}m ({PENTAGON_EDGE_LENGTH*100:.2f}cm)")
     print(f"Apothem: {APOTHEM:.4f}m ({APOTHEM*100:.2f}cm)")
     print(f"Circumradius: {CIRCUMRADIUS:.4f}m ({CIRCUMRADIUS*100:.2f}cm)")
-    
-    print("\n" + "-"*70)
     print("EDGES:")
-    print("-"*70)
     
     for edge_name in sorted(PENTAGON_EDGES.keys()):
         edge = PENTAGON_EDGES[edge_name]
         print(f"\n{edge}")
-        print(f"  Tangent angle: {edge.tangent_angle:.1f}°")
-        print(f"  Midpoint: ({edge.midpoint[0]:.4f}, {edge.midpoint[1]:.4f})")
-        print(f"  Vertex 1: ({edge.vertex1[0]:.4f}, {edge.vertex1[1]:.4f})")
-        print(f"  Vertex 2: ({edge.vertex2[0]:.4f}, {edge.vertex2[1]:.4f})")
+        print(f" Tangent angle: {edge.tangent_angle:.1f}°")
+        print(f" Midpoint: ({edge.midpoint[0]:.4f}, {edge.midpoint[1]:.4f})")
+        print(f" Vertex 1: ({edge.vertex1[0]:.4f}, {edge.vertex1[1]:.4f})")
+        print(f" Vertex 2: ({edge.vertex2[0]:.4f}, {edge.vertex2[1]:.4f})")
     
-    print("\n" + "-"*70)
     print("BLOCK PLACEMENT POSITIONS:")
-    print("-"*70)
-    
+
     for edge_name in sorted(PENTAGON_EDGES.keys()):
         edge = PENTAGON_EDGES[edge_name]
         
@@ -228,18 +210,15 @@ def print_pentagon_geometry():
         pos_l1 = edge.get_block_placement_position(layer=1)
         rot_l1 = edge.get_block_rotation(layer=1)
         print(f"\n{edge_name} Layer 1:")
-        print(f"  Position: ({pos_l1[0]:.4f}, {pos_l1[1]:.4f}, {pos_l1[2]:.4f})")
-        print(f"  Rotation: {rot_l1:.1f}°")
+        print(f"Position: ({pos_l1[0]:.4f}, {pos_l1[1]:.4f}, {pos_l1[2]:.4f})")
+        print(f"Rotation: {rot_l1:.1f}°")
         
         # Layer 2
         pos_l2 = edge.get_block_placement_position(layer=2)
         rot_l2 = edge.get_block_rotation(layer=2)
         print(f"{edge_name} Layer 2:")
-        print(f"  Position: ({pos_l2[0]:.4f}, {pos_l2[1]:.4f}, {pos_l2[2]:.4f})")
-        print(f"  Rotation: {rot_l2:.1f}°")
-    
-    print("\n" + "="*70)
-
+        print(f"Position: ({pos_l2[0]:.4f}, {pos_l2[1]:.4f}, {pos_l2[2]:.4f})")
+        print(f"Rotation: {rot_l2:.1f}°")
 
 if __name__ == "__main__":
     print_pentagon_geometry()

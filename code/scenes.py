@@ -240,18 +240,30 @@ def create_scene_10blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
     # Scatter blocks in two rows for initial placement
     block_positions = [
         # Row 1: 5 blocks (will become base pentagon b1-b5)
-        _rand_xy((0.60, -0.30, 0.02), noise=0.03),
+        _rand_xy((0.60, -0.40, 0.02), noise=0.03),
+        _rand_xy((0.60, -0.25, 0.02), noise=0.03),
         _rand_xy((0.60, 0.15, 0.02), noise=0.03),
         _rand_xy((0.60, 0.30, 0.02), noise=0.03),
         _rand_xy((0.60, 0.45, 0.02), noise=0.03),
-        _rand_xy((0.50, 0.40, 0.02), noise=0.03),
         
         # Row 2: 5 blocks (will become top pentagon b6-b10)
-        _rand_xy((0.30, -0.30, 0.02), noise=0.03),
-        _rand_xy((0.30, 0.00, 0.02), noise=0.03),
-        _rand_xy((0.30, 0.30, 0.02), noise=0.03),
-        _rand_xy((0.30, 0.45, 0.02), noise=0.03),
-        _rand_xy((0.40, 0.5, 0.02), noise=0.03),
+        _rand_xy((0.40, -0.40, 0.02), noise=0.03),
+        _rand_xy((0.40, -0.25, 0.02), noise=0.03),
+        _rand_xy((0.40, 0.15, 0.02), noise=0.03),
+        _rand_xy((0.40, 0.30, 0.02), noise=0.03),
+        _rand_xy((0.40, 0.45, 0.02), noise=0.03),
+        #_rand_xy((0.60, -0.30, 0.02), noise=0.03),
+        # _rand_xy((0.60, 0.15, 0.02), noise=0.03),
+        # _rand_xy((0.60, 0.30, 0.02), noise=0.03),
+        # _rand_xy((0.60, 0.45, 0.02), noise=0.03),
+        # _rand_xy((0.50, 0.40, 0.02), noise=0.03),
+        
+        # # Row 2: 5 blocks (will become top pentagon b6-b10)
+        # _rand_xy((0.30, -0.30, 0.02), noise=0.03),
+        # _rand_xy((0.30, 0.00, 0.02), noise=0.03),
+        # _rand_xy((0.30, 0.30, 0.02), noise=0.03),
+        # _rand_xy((0.30, 0.45, 0.02), noise=0.03),
+        # _rand_xy((0.40, 0.5, 0.02), noise=0.03),
     ]
     
     # Create blocks with distinct colors
