@@ -1,15 +1,5 @@
 """
-special_goal_3red_3green_directional.py
-
-DIRECTIONAL ADJACENCY TAMP:
-1. Execute FULL plan once per phase (no replanning per step)
-2. Only replan if final phase goal is not reached  
-3. DIRECTIONAL adjacency: ADJACENT-X (left/right) and ADJACENT-Y (front/back)
-4. Smart gripper rotation for collision avoidance
-5. Precise, deterministic placement
-
-Usage:
-    python special_goal_3red_3green_directional.py [gpu]
+Special Goal 4 Task 2: 3 Red and 3 Green Blocks with Directional Adjacency
 """
 
 import sys
@@ -98,11 +88,6 @@ def calculate_gripper_rotation(adjacent_blocks: dict) -> float:
     
     return 0.0
 
-
-# ============================================================================
-# Initialize Genesis
-# ============================================================================
-
 if len(sys.argv) > 1 and sys.argv[1] == "gpu":
     gs.init(backend=gs.gpu, logging_level="Warning", logger_verbose_time=False)
 else:
@@ -152,20 +137,7 @@ for _ in range(100):
     scene.step()
 
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
-
 domain_file = os.path.join(os.path.dirname(__file__), "blocksworld_directional.pddl")
-
-if not os.path.exists(domain_file):
-    print("\n⚠️  blocksworld_directional.pddl not found, trying spatial domain")
-    domain_file = os.path.join(os.path.dirname(__file__), "blocksworld_spatial.pddl")
-    if not os.path.exists(domain_file):
-        print("\n⚠️  Using standard blocksworld domain")
-        domain_file = os.path.join(os.path.dirname(__file__), "blocksworld.pddl")
-
-
-# ============================================================================
-# PHASE 1: BASE CONSTRUCTION with DIRECTIONAL ADJACENCY
-# ============================================================================
 
 print("\n" + "=" * 80)
 print("PHASE 1: BASE CONSTRUCTION (DIRECTIONAL ADJACENCY)")

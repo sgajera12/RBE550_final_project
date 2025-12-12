@@ -1,20 +1,13 @@
 """
-goal_pentagon_tower_tamp_two_phase.py
+Goal 4, Task 1: Pentagon 2 layer
 
-Two-phase TAMP:
+Our Stretegy: Two-phase TAMP
+Phase 1 (TAMP): Build the base pentagon (b1..b5) on the ground at base1..base5 slots.
 
-Phase 1 (TAMP): Build the base pentagon (b1..b5) on the table
-                at base1..base5 slots.
-
-Phase 2 (TAMP): Stack the top pentagon (b6..b10) at top1..top5,
-                each ON its corresponding base block.
+Phase 2 (TAMP): Stack the top pentagon (b6..b10) at top1..top5, each ON its corresponding base block.
 
 Geometry (positions + orientations) is fixed and identical to the
-layout used for the screenshots – only the symbolic plan (order of
-actions) is decided by Pyperplan.
-
-Usage:
-    python special_goal_1.py [gpu]
+layout used for the screenshots , only the symbolic plan (order of actions) is decided by Pyperplan.
 """
 
 import sys
@@ -23,8 +16,8 @@ import math
 import numpy as np
 import genesis as gs
 
-from pentagon_scene import create_scene_10blocks
-from pentagon_motion_primitives import MotionPrimitiveExecutor
+from scenes import create_scene_10blocks
+from motion_primitives import MotionPrimitiveExecutor
 from pentagon_predicates import extract_predicates, print_predicates
 from pentagon_task_planner import generate_pddl_problem, call_pyperplan, plan_to_string
 
@@ -84,16 +77,12 @@ for _ in range(50):
 for _ in range(100):
     scene.step()
 
-# ---------------------------------------------------------------------------
-# 3) Geometry helpers – EXACT same pentagon / bridge layout as before
-# ---------------------------------------------------------------------------
-
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
 domain_file = os.path.join(os.path.dirname(__file__), "pentagon_blocksworld.pddl")
 
 CENTER_X = 0.50
 CENTER_Y = 0.0
-PENTAGON_RADIUS = 0.06  # tuned to get your nice pentagon
+PENTAGON_RADIUS = 0.06  # tuned to get nice pentagon
 
 
 def get_pentagon_position(index, center_x, center_y, radius, rotation_offset=0.0):
@@ -139,6 +128,9 @@ BASE_SLOT_GEOM = {}  # slot -> (x, y, rot)
 
 for i, slot in enumerate(BASE_SLOT_NAMES):
     x, y, rot = get_pentagon_position(i, CENTER_X, CENTER_Y, PENTAGON_RADIUS, 0.0)
+
+    x+=0.0045
+
     BASE_SLOT_GEOM[slot] = (x, y, rot)
     print(f"  {slot}: angle={rot:.1f}°, pos=({x:.4f}, {y:.4f})")
 
@@ -150,7 +142,8 @@ TOP_SLOT_SUPPORT = {}  # slot -> base block id
 for i, slot in enumerate(TOP_SLOT_NAMES):
     x, y, rot = get_bridge_position(i, CENTER_X, CENTER_Y, PENTAGON_RADIUS, 36.0)
     
-    x += 0.0045
+    x += 0.0053
+    y-= 0.0005
 
     TOP_SLOT_GEOM[slot] = (x, y, rot)
     TOP_SLOT_SUPPORT[slot] = BLOCK_IDS_BASE[i]  # top1 over b1, etc.
@@ -159,13 +152,10 @@ for i, slot in enumerate(TOP_SLOT_NAMES):
 print("\n" + "=" * 80)
 print("GEOMETRY SUMMARY")
 print("=" * 80)
-print("Base slots (base1..5) form the table pentagon.")
+print("Base slots (base1..5) form the ground pentagon.")
 print("Top slots (top1..5) are the rotated bridged pentagon.")
 
-# ---------------------------------------------------------------------------
 # Small helpers: continuous execution for base + top actions
-# ---------------------------------------------------------------------------
-
 def place_held_block_on_base_slot(slot_name: str) -> bool:
     """Assumes the block is already held; place at base pentagon slot."""
     if slot_name not in BASE_SLOT_GEOM:
@@ -174,7 +164,7 @@ def place_held_block_on_base_slot(slot_name: str) -> bool:
 
     x, y, rot = BASE_SLOT_GEOM[slot_name]
     print(f"[EXEC] put-down-base at {slot_name} → ({x:.3f}, {y:.3f}), rot={rot:.1f}")
-    return executor.put_down(x=x, y=y, rotation_z=rot)
+    return executor.put_down_sp(x=x, y=y, rotation_z=rot)
 
 
 def place_held_block_on_top_slot(slot_name: str) -> bool:

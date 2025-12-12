@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 import numpy as np
+import math
 from planning import PlannerInterface
 
 BLOCK_SIZE = 0.04
@@ -57,6 +58,78 @@ class MotionPrimitiveExecutor:
         if isinstance(pos, np.ndarray):
             return pos.astype(float)
         return np.array(pos, dtype=float)
+    
+    # Convert Euler angles to quaternion for sp1
+    def _euler_to_quaternion(self, roll: float, pitch: float, yaw: float) -> np.ndarray:
+        """Convert Euler angles (in radians) to quaternion [w, x, y, z]."""
+        cy = math.cos(yaw * 0.5)
+        sy = math.sin(yaw * 0.5)
+        cp = math.cos(pitch * 0.5)
+        sp = math.sin(pitch * 0.5)
+        cr = math.cos(roll * 0.5)
+        sr = math.sin(roll * 0.5)
+
+        w = cr * cp * cy + sr * sp * sy
+        x = sr * cp * cy - cr * sp * sy
+        y = cr * sp * cy + sr * cp * sy
+        z = cr * cp * sy - sr * sp * cy
+
+        return np.array([w, x, y, z], dtype=float)
+    def _calculate_rotated_quaternion(self, wrist_rotation: float) -> np.ndarray:
+            """
+            Calculate gripper quaternion with wrist rotation.
+            
+            Args:
+                wrist_rotation: Rotation around Z-axis in radians
+                
+            Returns:
+                Quaternion [w, x, y, z] for gripper orientation
+            """
+            # Base quaternion: gripper pointing down [w, x, y, z]
+            # [0, 1, 0, 0] = gripper pointing down, fingers in default orientation
+            
+            if abs(wrist_rotation) < 0.01:
+                # No rotation needed
+                return np.array([0.0, 1.0, 0.0, 0.0], dtype=float)
+            
+            # For 90° rotation around Z-axis
+            # We need to rotate the base orientation
+            # Using quaternion multiplication: q_final = q_z_rot * q_base
+            
+            # Z-axis rotation quaternion
+            half_angle = wrist_rotation / 2.0
+            c = np.cos(half_angle)
+            s = np.sin(half_angle)
+            q_z = np.array([c, 0.0, 0.0, s])  # [w, x, y, z] for Z-rotation
+            
+            # Base quaternion
+            q_base = np.array([0.0, 1.0, 0.0, 0.0])
+            
+            # Quaternion multiplication: q_z * q_base
+            w = q_z[0] * q_base[0] - q_z[1] * q_base[1] - q_z[2] * q_base[2] - q_z[3] * q_base[3]
+            x = q_z[0] * q_base[1] + q_z[1] * q_base[0] + q_z[2] * q_base[3] - q_z[3] * q_base[2]
+            y = q_z[0] * q_base[2] - q_z[1] * q_base[3] + q_z[2] * q_base[0] + q_z[3] * q_base[1]
+            z = q_z[0] * q_base[3] + q_z[1] * q_base[2] - q_z[2] * q_base[1] + q_z[3] * q_base[0]
+            
+            return np.array([w, x, y, z], dtype=float)
+    
+    # Get rotated grasp quaternion for sp1
+    def _get_rotated_grasp_quat(self, rotation_z_degrees: float) -> np.ndarray:
+        """Get grasp quaternion with Z-axis rotation applied.
+        
+        Args:
+            rotation_z_degrees: Rotation around Z-axis in degrees
+            
+        Returns:
+            Quaternion [w, x, y, z]
+        """
+        # Base grasp orientation (gripper pointing down)
+        # Roll=0, Pitch=180° (pointing down), Yaw=rotation_z
+        roll = 0.0
+        pitch = math.pi  # 180 degrees - gripper pointing down
+        yaw = math.radians(rotation_z_degrees)
+        
+        return self._euler_to_quaternion(roll, pitch, yaw)
     
     #ik solver for given pose
     def _ik_for_pose(self, pos: np.ndarray, quat: np.ndarray) -> Optional[np.ndarray]:
@@ -183,7 +256,7 @@ class MotionPrimitiveExecutor:
         self.target_qpos = target_q
         print("motion: Gripper closed")
 
-    # Pick up block method
+    # Pick up block method for task 1 2 3 and sp1
     def pick_up(self, block_id: Any) -> bool:
         key = self._resolve_block_key(block_id)
         center = self._block_center(key)
@@ -232,7 +305,58 @@ class MotionPrimitiveExecutor:
         print("motion: PICK-UP SUCCESS")
         return True
     
-    # Put down block method
+    # Pick up block method with wrist rotation for collision avoidance for sp2
+    def pick_up_sp(self, block_id: Any, wrist_rotation: float = 0.0) -> bool:
+        key = self._resolve_block_key(block_id)
+        center = self._block_center(key)
+
+        if abs(wrist_rotation) > 0.01:
+            print(f"\nmotion: PICK-UP: '{key}' with {np.degrees(wrist_rotation):.0f}° wrist rotation")
+        else:
+            print(f"\nmotion: PICK-UP: '{key}'")
+
+        top_of_block_z = center[2] + (BLOCK_SIZE / 2.0)
+        approach_pos = center.copy()
+        approach_pos[2] = top_of_block_z + self.config.min_approach_height
+        grasp_pos = center.copy()
+        grasp_pos[2] = center[2] + self.config.grasp_offset
+
+        # Calculate grasp quaternion with wrist rotation
+        grasp_quat = self._calculate_rotated_quaternion(wrist_rotation)
+
+        # Open gripper first
+        self.open_gripper()
+        # Go to approach
+        q_approach = self._ik_for_pose(approach_pos, grasp_quat)
+        if q_approach is None or not self._plan_and_execute(q_approach):
+            return False
+        # Descend to grasp
+        q_grasp = self._ik_for_pose(grasp_pos, grasp_quat)
+        if q_grasp is None or not self._plan_and_execute(q_grasp):
+            return False
+
+        self.close_gripper()
+        # Hold briefly
+        self._hold_position(0.15)
+        # Direct lift
+        current_q = self.robot.get_qpos()
+        if hasattr(current_q, "cpu"):
+            start_q = current_q.cpu().numpy().copy()
+        else:
+            start_q = np.array(current_q, dtype=float, copy=True)
+        
+        for i in range(40):
+            alpha = (i + 1) / 40.0
+            q_interp = (1 - alpha) * start_q + alpha * q_approach
+            q_interp[-2:] = self.config.gripper_closed_width
+            self.robot.control_dofs_position(q_interp)
+            self.scene.step()
+
+        print("motion: PICK-UP SUCCESS")
+        return True
+
+
+    # Put down block method for task 1 2 3 and sp2
     def put_down(self, x: float = 0.50, y: float = 0.0) -> bool:
         """Place held block on ground at position (x, y). 
         Default: (0.50, 0.0) - centered below robot for stability
@@ -312,6 +436,195 @@ class MotionPrimitiveExecutor:
         
         print("motion: PUT-DOWN SUCCESS")
         return True
+    # Put down with rotation for sp1
+    def put_down_sp(self, x: float = 0.50, y: float = 0.0, rotation_z: float = 0.0) -> bool:
+        """Place held block on table at position (x, y) with optional Z-axis rotation.
+        
+        Args:
+            x: X position (default: 0.50)
+            y: Y position (default: 0.0)
+            rotation_z: Rotation around Z-axis in degrees (default: 0.0)
+                       0° = aligned with robot base
+                       Positive = counter-clockwise when viewed from above
+        
+        Returns:
+            bool: True if successful
+        """
+        if not self.gripper_holding:
+            print("motion: Not holding any block!")
+            return False
+        
+        if rotation_z != 0.0:
+            print(f"\nmotion: PUT-DOWN at ({x:.2f}, {y:.2f}) with rotation {rotation_z:.1f}°")
+        else:
+            print(f"\nmotion: PUT-DOWN at ({x:.2f}, {y:.2f})")
+        
+        # Find held block
+        hand = self.robot.get_link("hand")
+        hand_pos = np.array(hand.get_pos())
+        held_block = None
+        
+        for key, block in self.blocks_state.items():
+            block_pos = np.array(block.get_pos())
+            dist = np.linalg.norm(block_pos - hand_pos)
+            if dist < 0.15:
+                held_block = block
+                break
+        
+        # Get rotated grasp quaternion
+        place_quat = self._get_rotated_grasp_quat(rotation_z)
+        
+        # Calculate placement position
+        place_center = np.array([x, y, GROUND_BLOCK_CENTER_Z])
+        place_gripper = place_center.copy()
+        place_gripper[2] = GROUND_BLOCK_CENTER_Z + self.config.grasp_offset
+        
+        # Approach position (above placement)
+        approach_pos = place_gripper.copy()
+        approach_pos[2] += 0.15
+        
+        # Move to approach with rotation
+        q_approach = self._ik_for_pose(approach_pos, place_quat)
+        if q_approach is None or not self._plan_and_execute(q_approach, attached_object=held_block):
+            return False
+        
+        # Descend to placement
+        current_q = self.robot.get_qpos()
+        if hasattr(current_q, "cpu"):
+            start_q = current_q.cpu().numpy().copy()
+        else:
+            start_q = np.array(current_q, dtype=float, copy=True)
+        
+        q_place = self._ik_for_pose(place_gripper, place_quat)
+        if q_place is None:
+            return False
+        
+        # Slow descent
+        for i in range(40):
+            alpha = (i + 1) / 40.0
+            q = (1 - alpha) * start_q + alpha * q_place
+            q[-2:] = self.config.gripper_closed_width
+            self.robot.control_dofs_position(q)
+            self.scene.step()
+        
+        # Release
+        self.open_gripper()
+        
+        # Lift up (maintain rotation)
+        current_pos = np.array(hand.get_pos())
+        up_pos = current_pos.copy()
+        up_pos[2] += 0.10
+        
+        q_up = self._ik_for_pose(up_pos, place_quat)
+        if q_up is not None:
+            current_q = self.robot.get_qpos()
+            if hasattr(current_q, "cpu"):
+                start_q = current_q.cpu().numpy().copy()
+            else:
+                start_q = np.array(current_q, dtype=float, copy=True)
+            
+            for i in range(30):
+                alpha = (i + 1) / 30.0
+                q = (1 - alpha) * start_q + alpha * q_up
+                self.robot.control_dofs_position(q)
+                self.scene.step()
+        
+        print("motion: PUT-DOWN SUCCESS")
+        return True
+
+    # Put down adjacent to reference block for sp2
+    def put_down_adjacent_to(self, reference_block_id: str, predicates: set) -> bool:
+        """
+        Place held block adjacent to a reference block.
+        
+        Intelligently calculates placement position to be ~4cm away from reference block.
+        Considers existing adjacent blocks to place in an empty spot.
+        
+        Args:
+            reference_block_id: Block to place adjacent to
+            predicates: Current predicates to understand existing configuration
+            
+        Returns:
+            bool: Success status
+        """
+        if not self.gripper_holding:
+            print("motion: Not holding any block!")
+            return False
+        
+        print(f"\nmotion: PUT-DOWN-ADJACENT to '{reference_block_id}'")
+        
+        # Get reference block position
+        ref_key = self._resolve_block_key(reference_block_id)
+        ref_pos = self._block_center(ref_key)
+        
+        print(f"motion: Reference block '{ref_key}' at ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
+        
+        # Find which positions around reference are already occupied
+        # Check predicates for adjacent blocks
+        occupied_directions = set()
+        
+        for pred in predicates:
+            if pred.startswith("ADJACENT("):
+                # Parse ADJACENT(a,b)
+                inside = pred[9:-1]
+                a, b = inside.split(",")
+                
+                if a == ref_key or b == ref_key:
+                    # One of them is our reference, find the other
+                    other = b if a == ref_key else a
+                    other_pos = self._block_center(other)
+                    
+                    # Determine direction
+                    dx = other_pos[0] - ref_pos[0]
+                    dy = other_pos[1] - ref_pos[1]
+                    
+                    if abs(dx) > abs(dy):  # Horizontal adjacency
+                        if dx > 0:
+                            occupied_directions.add('+x')
+                        else:
+                            occupied_directions.add('-x')
+                    else:  # Vertical adjacency
+                        if dy > 0:
+                            occupied_directions.add('+y')
+                        else:
+                            occupied_directions.add('-y')
+        
+        print(f"motion: Occupied directions: {occupied_directions}")
+        
+        # Choose an unoccupied direction
+        # Priority: +x, +y, -x, -y (to build a nice grid)
+        possible_directions = [
+            ('+x', (BLOCK_SIZE, 0)),
+            ('+y', (0, BLOCK_SIZE)),
+            ('-x', (-BLOCK_SIZE, 0)),
+            ('-y', (0, -BLOCK_SIZE)),
+        ]
+        
+        chosen_offset = None
+        for direction, offset in possible_directions:
+            if direction not in occupied_directions:
+                chosen_offset = offset
+                print(f"motion: Choosing direction: {direction}")
+                break
+        
+        if chosen_offset is None:
+            # All directions occupied, just place somewhere nearby
+            print("motion:All directions occupied, placing at default offset")
+            chosen_offset = (BLOCK_SIZE * 1.5, 0)
+        
+        # Calculate target position
+        target_x = ref_pos[0] + chosen_offset[0]
+        target_y = ref_pos[1] + chosen_offset[1]
+        
+        print(f"motion: Target position: ({target_x:.3f}, {target_y:.3f})")
+        
+        # Use existing put_down with specific coordinates
+        success = self.put_down(x=target_x, y=target_y)
+        
+        if success:
+            print(f"motion: ✓ Successfully placed adjacent to '{ref_key}'")
+        
+        return success
 
     def stack_on(self, target_block_id: Any,predicates=None) -> bool:
         """
@@ -337,7 +650,7 @@ class MotionPrimitiveExecutor:
                 held_block = block
                 break
         
-        # 2. If this base has no stored XY → detect and store
+        # 2. If this base has no stored XY > detect and store
         if base not in self.tower_centers:
             center = self._block_center(base)
             self.tower_centers[base] = (center[0], center[1])
@@ -349,8 +662,8 @@ class MotionPrimitiveExecutor:
         # 4. Compute Z from actual target block
         target_center = self._block_center(target_block_id)
         target_z = target_center[2]
-        BLOCK_SIZE = 0.04
-        new_z = target_z + BLOCK_SIZE
+        # BLOCK_SIZE = 0.04
+        # new_z = target_z + BLOCK_SIZE
         # Calculate precise placement using FIXED XY
         target_top_z = target_z + (BLOCK_SIZE / 2.0)
         final_block_bottom_z = target_top_z
@@ -476,3 +789,75 @@ class MotionPrimitiveExecutor:
             if not found_parent:
                 # No ON(a,b) found > must be base (ONTABLE)
                 return current
+    def put_down_adjacent_x(self, reference_block_id: str, direction: str = "+x") -> bool:
+        """
+        Place held block adjacent to reference block in X direction.
+        Args:
+            reference_block_id: Block to place adjacent to
+            direction: "+x" (right) or "-x" (left)
+        Returns:
+            bool: Success status
+        """
+        if not self.gripper_holding:
+            print("motion: Not holding any block!")
+            return False
+        
+        BLOCK_SIZE = 0.04
+        
+        ref_key = self._resolve_block_key(reference_block_id)
+        ref_pos = self._block_center(ref_key)
+        
+        # Calculate target position in X direction
+        if direction == "+x":
+            # Place to the RIGHT of reference
+            target_x = ref_pos[0] + BLOCK_SIZE
+            print(f"\nmotion: PUT-DOWN-ADJACENT-X: Placing to RIGHT of '{ref_key}'")
+        else:  # "-x"
+            # Place to the LEFT of reference
+            target_x = ref_pos[0] - BLOCK_SIZE
+            print(f"\nmotion: PUT-DOWN-ADJACENT-X: Placing to LEFT of '{ref_key}'")
+        
+        target_y = ref_pos[1]  # Same Y as reference
+        
+        print(f"motion: Reference: ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
+        print(f"motion: Target: ({target_x:.3f}, {target_y:.3f})")
+        
+        # Use existing put_down with specific coordinates
+        return self.put_down(x=target_x, y=target_y)
+
+
+    def put_down_adjacent_y(self, reference_block_id: str, direction: str = "+y") -> bool:
+        """
+        Place held block adjacent to reference block in Y direction.
+        Args:
+            reference_block_id: Block to place adjacent to
+            direction: "+y" (front) or "-y" (back)
+        Returns:
+            bool: Success status
+        """
+        if not self.gripper_holding:
+            print("motion: Not holding any block!")
+            return False
+        
+        BLOCK_SIZE = 0.04
+        
+        ref_key = self._resolve_block_key(reference_block_id)
+        ref_pos = self._block_center(ref_key)
+        
+        # Calculate target position in Y direction
+        target_x = ref_pos[0]  # Same X as reference
+        
+        if direction == "+y":
+            # Place in FRONT of reference
+            target_y = ref_pos[1] + BLOCK_SIZE+0.01
+            print(f"\nmotion: PUT-DOWN-ADJACENT-Y: Placing in FRONT of '{ref_key}'")
+        else:  # "-y"
+            # Place BEHIND reference
+            target_y = ref_pos[1] - BLOCK_SIZE
+            print(f"\nmotion: PUT-DOWN-ADJACENT-Y: Placing BEHIND '{ref_key}'")
+        
+        print(f"motion: Reference: ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
+        print(f"motion: Target: ({target_x:.3f}, {target_y:.3f})")
+        
+        # Use existing put_down with specific coordinates
+        return self.put_down(x=target_x, y=target_y)

@@ -1,6 +1,4 @@
 """
-pentagon_predicates.py
-
 Symbolic abstraction for pentagon structure
 Extracts predicates about block positions relative to pentagon edges
 """
