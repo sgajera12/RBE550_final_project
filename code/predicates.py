@@ -1,9 +1,6 @@
 """
-predicates.py
-
 Symbolic Abstraction (Lifting) Module
 Converts Genesis scene state into PDDL predicates
-
 Predicates:
 - ON(block_a, block_b): block_a is on top of block_b
 - ONTABLE(block): block is on the table
@@ -22,7 +19,7 @@ XY_TOLERANCE = 0.02
 
 
 def extract_predicates(scene: Any, franka: Any, blocks_state: Dict[str, Any]) -> Set[str]:
-    """Convert current scene state to PDDL predicates"""
+    #Convert current scene state to PDDL predicates
     predicates = set()
     
     # Get all block positions
@@ -90,11 +87,7 @@ def extract_predicates(scene: Any, franka: Any, blocks_state: Dict[str, Any]) ->
 
 
 def print_predicates(predicates: Set[str]) -> None:
-    """Pretty print predicates"""
-    print("\n" + "="*60)
     print("PREDICATES:")
-    print("="*60)
-    
     on_preds = sorted([p for p in predicates if p.startswith("ON(")])
     ontable_preds = sorted([p for p in predicates if p.startswith("ONTABLE(")])
     clear_preds = sorted([p for p in predicates if p.startswith("CLEAR(")])
@@ -126,4 +119,3 @@ def print_predicates(predicates: Set[str]) -> None:
         for p in handempty_preds:
             print(f"  {p}")
     
-    print("="*60 + "\n")

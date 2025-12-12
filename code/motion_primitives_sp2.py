@@ -16,7 +16,7 @@ from planning import PlannerInterface
 
 
 BLOCK_SIZE = 0.04
-TABLE_BLOCK_CENTER_Z = 0.02
+GROUND_BLOCK_CENTER_Z = 0.02
 SAFE_RETREAT_POS = np.array([0.7, 0.0, 0.5])
 MIN_APPROACH_HEIGHT = 0.180
 GRIPPER_OPEN_WIDTH = 0.04
@@ -117,7 +117,7 @@ class MotionPrimitiveExecutor:
     def _plan_and_execute(self, q_goal: np.ndarray, attached_object: Any = None, description: str = "", retries: int = 2) -> bool:
         """Execute path directly - FAST. Retry if needed."""
         if description:
-            print(f"[motion] Planning: {description}")
+            print(f"motion: Planning: {description}")
         
         for attempt in range(retries):
             path = self.planner.plan_path(
@@ -131,17 +131,17 @@ class MotionPrimitiveExecutor:
                 break
             
             if attempt < retries - 1:
-                print(f"[motion] Planning failed, retry {attempt + 1}/{retries - 1}...")
+                print(f"motion: Planning failed, retry {attempt + 1}/{retries - 1}...")
                 # Small random perturbation might help
                 q_goal_perturbed = q_goal.copy()
                 q_goal_perturbed[:7] += np.random.uniform(-0.01, 0.01, 7)
                 q_goal = q_goal_perturbed
         
         if not path:
-            print("[motion] Planning failed after retries")
+            print("motion: Planning failed after retries")
             return False
 
-        print(f"[motion] Executing...")
+        print(f"motion: Executing...")
         
         # Direct execution
         for waypoint in path:
@@ -200,13 +200,13 @@ class MotionPrimitiveExecutor:
             self.scene.step()
 
     def open_gripper(self) -> None:
-        print("[motion] Opening gripper...")
+        print("motion: Opening gripper...")
         self.gripper_holding = False
         self._interpolate_gripper(self.config.gripper_open_width)
-        print("[motion] Gripper opened")
+        print("motion: Gripper opened")
 
     def close_gripper(self) -> None:
-        print("[motion] Closing gripper...")
+        print("motion: Closing gripper...")
         
         # Get current position BEFORE closing
         current_q = self.robot.get_qpos()
@@ -234,7 +234,7 @@ class MotionPrimitiveExecutor:
             self.scene.step()
         
         self.target_qpos = target_q
-        print("[motion] Gripper closed")
+        print("motion: Gripper closed")
 
     def pick_up(self, block_id: Any, wrist_rotation: float = 0.0) -> bool:
         """
@@ -253,9 +253,9 @@ class MotionPrimitiveExecutor:
         center = self._block_center(key)
 
         if abs(wrist_rotation) > 0.01:
-            print(f"\n[motion] PICK-UP: '{key}' with {np.degrees(wrist_rotation):.0f}° wrist rotation")
+            print(f"\nmotion: PICK-UP: '{key}' with {np.degrees(wrist_rotation):.0f}° wrist rotation")
         else:
-            print(f"\n[motion] PICK-UP: '{key}'")
+            print(f"\nmotion: PICK-UP: '{key}'")
 
         top_of_block_z = center[2] + (BLOCK_SIZE / 2.0)
         approach_pos = center.copy()
@@ -298,7 +298,7 @@ class MotionPrimitiveExecutor:
             self.robot.control_dofs_position(q_interp)
             self.scene.step()
 
-        print("[motion] PICK-UP SUCCESS")
+        print("motion: PICK-UP SUCCESS")
         return True
 
     def put_down(self, x: float = 0.50, y: float = 0.0) -> bool:
@@ -307,10 +307,10 @@ class MotionPrimitiveExecutor:
         Default: (0.50, 0.0) - centered below robot for stability
         """
         if not self.gripper_holding:
-            print("[motion] Not holding any block!")
+            print("motion: Not holding any block!")
             return False
         
-        print(f"\n[motion] PUT-DOWN at ({x:.2f}, {y:.2f})")
+        print(f"\nmotion: PUT-DOWN at ({x:.2f}, {y:.2f})")
         
         # Find held block
         hand = self.robot.get_link("hand")
@@ -325,9 +325,9 @@ class MotionPrimitiveExecutor:
                 break
         
         # Calculate placement position
-        place_center = np.array([x, y, TABLE_BLOCK_CENTER_Z])
+        place_center = np.array([x, y, GROUND_BLOCK_CENTER_Z])
         place_gripper = place_center.copy()
-        place_gripper[2] = TABLE_BLOCK_CENTER_Z + self.config.grasp_offset
+        place_gripper[2] = GROUND_BLOCK_CENTER_Z + self.config.grasp_offset
         
         # Approach position (above placement)
         approach_pos = place_gripper.copy()
@@ -379,7 +379,7 @@ class MotionPrimitiveExecutor:
                 self.robot.control_dofs_position(q)
                 self.scene.step()
         
-        print("[motion] PUT-DOWN SUCCESS")
+        print("motion: PUT-DOWN SUCCESS")
         return True
 
     def put_down_adjacent_to(self, reference_block_id: str, predicates: set) -> bool:
@@ -397,16 +397,16 @@ class MotionPrimitiveExecutor:
             bool: Success status
         """
         if not self.gripper_holding:
-            print("[motion] Not holding any block!")
+            print("motion: Not holding any block!")
             return False
         
-        print(f"\n[motion] PUT-DOWN-ADJACENT to '{reference_block_id}'")
+        print(f"\nmotion: PUT-DOWN-ADJACENT to '{reference_block_id}'")
         
         # Get reference block position
         ref_key = self._resolve_block_key(reference_block_id)
         ref_pos = self._block_center(ref_key)
         
-        print(f"[motion] Reference block '{ref_key}' at ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
+        print(f"motion: Reference block '{ref_key}' at ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
         
         # Find which positions around reference are already occupied
         # Check predicates for adjacent blocks
@@ -438,7 +438,7 @@ class MotionPrimitiveExecutor:
                         else:
                             occupied_directions.add('-y')
         
-        print(f"[motion] Occupied directions: {occupied_directions}")
+        print(f"motion: Occupied directions: {occupied_directions}")
         
         # Choose an unoccupied direction
         # Priority: +x, +y, -x, -y (to build a nice grid)
@@ -453,25 +453,25 @@ class MotionPrimitiveExecutor:
         for direction, offset in possible_directions:
             if direction not in occupied_directions:
                 chosen_offset = offset
-                print(f"[motion] Choosing direction: {direction}")
+                print(f"motion: Choosing direction: {direction}")
                 break
         
         if chosen_offset is None:
             # All directions occupied, just place somewhere nearby
-            print("[motion] ⚠️  All directions occupied, placing at default offset")
+            print("motion: ⚠️  All directions occupied, placing at default offset")
             chosen_offset = (BLOCK_SIZE * 1.5, 0)
         
         # Calculate target position
         target_x = ref_pos[0] + chosen_offset[0]
         target_y = ref_pos[1] + chosen_offset[1]
         
-        print(f"[motion] Target position: ({target_x:.3f}, {target_y:.3f})")
+        print(f"motion: Target position: ({target_x:.3f}, {target_y:.3f})")
         
         # Use existing put_down with specific coordinates
         success = self.put_down(x=target_x, y=target_y)
         
         if success:
-            print(f"[motion] ✓ Successfully placed adjacent to '{ref_key}'")
+            print(f"motion: ✓ Successfully placed adjacent to '{ref_key}'")
         
         return success
 
@@ -503,7 +503,7 @@ class MotionPrimitiveExecutor:
         if base not in self.tower_centers:
             center = self._block_center(base)
             self.tower_centers[base] = (center[0], center[1])
-            print(f"[motion] New tower base: {base}, center={self.tower_centers[base]}")
+            print(f"motion: New tower base: {base}, center={self.tower_centers[base]}")
         
         # 3. Use ONLY that tower's XY
         tower_xy = np.array(self.tower_centers[base])
@@ -574,14 +574,14 @@ class MotionPrimitiveExecutor:
             self.scene.step()
         
         # Hold position to let block settle
-        print("[motion] Holding position for stability...")
+        print("motion: Holding position for stability...")
         hold_q = self.robot.get_qpos()
         if hasattr(hold_q, "cpu"):
             hold_q = hold_q.cpu().numpy().copy()
         else:
             hold_q = np.array(hold_q, dtype=float, copy=True)
         
-        # Hold for 100 steps (~1 second)
+        # Hold for 100 steps 
         for _ in range(100):
             self.robot.control_dofs_position(hold_q)
             self.scene.step()
@@ -608,7 +608,7 @@ class MotionPrimitiveExecutor:
                 self.robot.control_dofs_position(q)
                 self.scene.step()
         
-        print("[motion] STACK COMPLETE")
+        print("motion: STACK COMPLETE")
         return True
     
     def _find_base_block(self, block_id, predicates):
@@ -641,16 +641,14 @@ class MotionPrimitiveExecutor:
     def put_down_adjacent_x(self, reference_block_id: str, direction: str = "+x") -> bool:
         """
         Place held block adjacent to reference block in X direction.
-        
         Args:
             reference_block_id: Block to place adjacent to
             direction: "+x" (right) or "-x" (left)
-        
         Returns:
             bool: Success status
         """
         if not self.gripper_holding:
-            print("[motion] Not holding any block!")
+            print("motion: Not holding any block!")
             return False
         
         BLOCK_SIZE = 0.04
@@ -662,16 +660,16 @@ class MotionPrimitiveExecutor:
         if direction == "+x":
             # Place to the RIGHT of reference
             target_x = ref_pos[0] + BLOCK_SIZE
-            print(f"\n[motion] PUT-DOWN-ADJACENT-X: Placing to RIGHT of '{ref_key}'")
+            print(f"\nmotion: PUT-DOWN-ADJACENT-X: Placing to RIGHT of '{ref_key}'")
         else:  # "-x"
             # Place to the LEFT of reference
             target_x = ref_pos[0] - BLOCK_SIZE
-            print(f"\n[motion] PUT-DOWN-ADJACENT-X: Placing to LEFT of '{ref_key}'")
+            print(f"\nmotion: PUT-DOWN-ADJACENT-X: Placing to LEFT of '{ref_key}'")
         
         target_y = ref_pos[1]  # Same Y as reference
         
-        print(f"[motion] Reference: ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
-        print(f"[motion] Target: ({target_x:.3f}, {target_y:.3f})")
+        print(f"motion: Reference: ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
+        print(f"motion: Target: ({target_x:.3f}, {target_y:.3f})")
         
         # Use existing put_down with specific coordinates
         return self.put_down(x=target_x, y=target_y)
@@ -680,16 +678,14 @@ class MotionPrimitiveExecutor:
     def put_down_adjacent_y(self, reference_block_id: str, direction: str = "+y") -> bool:
         """
         Place held block adjacent to reference block in Y direction.
-        
         Args:
             reference_block_id: Block to place adjacent to
             direction: "+y" (front) or "-y" (back)
-        
         Returns:
             bool: Success status
         """
         if not self.gripper_holding:
-            print("[motion] Not holding any block!")
+            print("motion: Not holding any block!")
             return False
         
         BLOCK_SIZE = 0.04
@@ -703,14 +699,14 @@ class MotionPrimitiveExecutor:
         if direction == "+y":
             # Place in FRONT of reference
             target_y = ref_pos[1] + BLOCK_SIZE+0.01
-            print(f"\n[motion] PUT-DOWN-ADJACENT-Y: Placing in FRONT of '{ref_key}'")
+            print(f"\nmotion: PUT-DOWN-ADJACENT-Y: Placing in FRONT of '{ref_key}'")
         else:  # "-y"
             # Place BEHIND reference
             target_y = ref_pos[1] - BLOCK_SIZE
-            print(f"\n[motion] PUT-DOWN-ADJACENT-Y: Placing BEHIND '{ref_key}'")
+            print(f"\nmotion: PUT-DOWN-ADJACENT-Y: Placing BEHIND '{ref_key}'")
         
-        print(f"[motion] Reference: ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
-        print(f"[motion] Target: ({target_x:.3f}, {target_y:.3f})")
+        print(f"motion: Reference: ({ref_pos[0]:.3f}, {ref_pos[1]:.3f})")
+        print(f"motion: Target: ({target_x:.3f}, {target_y:.3f})")
         
         # Use existing put_down with specific coordinates
         return self.put_down(x=target_x, y=target_y)

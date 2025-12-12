@@ -1,21 +1,18 @@
 """
-goal1_tamp_proper.py
+Task 1: Two 3-block towers - SCATTERED SCENARIO
+Starting with: All 6 blocks in grounded scattered positions
 
-Goal 1: Two 3-block towers using PROPER TAMP pipeline
-
-Pipeline:
-1. Symbolic Abstraction → Extract predicates from scene
-2. Task Planning → Call Pyperplan to get action sequence
-3. Execute first action → Use motion primitives
-4. Re-ground → Extract new predicates
-5. Re-plan if needed → Loop until goal reached
+Our Pipeline:
+1. Symbolic Abstraction: Extract predicates from scene
+2. Task Planning: Call Pyperplan to get action sequence
+3. Execute first action: Use motion primitives
+4. Re-ground: Extract new predicates
+5. Re-plan if needed: Loop until goal reached
 
 Goal:
-  Tower 1: GREEN-RED-BLUE (g on table, r on g, b on r)
-  Tower 2: MAGENTA-YELLOW-CYAN (m on table, y on m, c on y)
+Tower 1: GREEN-RED-BLUE (g on table, r on g, b on r)
+Tower 2: MAGENTA-YELLOW-CYAN (m on table, y on m, c on y)
 
-Usage:
-    python goal1_tamp_proper.py [gpu]
 """
 
 import sys
@@ -35,26 +32,17 @@ else:
 
 scene, franka, blocks_state = create_scene_6blocks()
 
-# Strong gripper control
-franka.set_dofs_kp(
-    np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),
-)
-franka.set_dofs_kv(
-    np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),
-)
-franka.set_dofs_force_range(
-    np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),
-    np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),
-)
+# For Strong gripper control
+franka.set_dofs_kp(np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),)
+franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
+franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),)
 
-print("="*80)
-print("GOAL 1: TWO 3-BLOCK TOWERS (PROPER TAMP PIPELINE)")
-print("="*80)
+print("\nScene and Franka robot initialized.")
 
-# Move to home
+# Our Home position (safe for 6-block setup)
 safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
 
-print("\nMoving to home...")
+print("\nMoving to home position")
 current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
@@ -77,52 +65,41 @@ for _ in range(100):
 
 # DEFINE GOAL
 goal_predicates = {
-    # Tower 1: g-r-b
+    #Tower 1: g-r-b
     "ON(r,g)",
     "ON(b,r)",
     "ONTABLE(g)",
     "CLEAR(b)",
-    
-    # Tower 2: m-y-c
+    #Tower 2: m-y-c
     "ON(y,m)",
     "ON(c,y)",
     "ONTABLE(m)",
     "CLEAR(c)",
-    
-    # Gripper
+    #Gripper
     "HANDEMPTY()"
 }
 
 blocks = ['r', 'g', 'b', 'y', 'm', 'c']
-
-print("\n" + "="*80)
-print("GOAL STATE:")
-print("="*80)
-print("\nTower 1: GREEN → RED → BLUE")
-print("Tower 2: MAGENTA → YELLOW → CYAN")
+print("Goal state")
+print("\nTower 1: GREEN > RED > BLUE | Tower 2: MAGENTA > YELLOW > CYAN")
 print("\nGoal predicates:")
+
 for p in sorted(goal_predicates):
-    print(f"  {p}")
+    print(f" {p}")
 
-# TAMP EXECUTION LOOP
+# Tamp execution setup
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
-
 domain_file = "/home/pinaka/RBE550Final/RBE550_final_project/code/blocksworld.pddl"
 max_iterations = 20
 iteration = 0
 
-print("\n" + "="*80)
-print("STARTING TAMP LOOP")
-print("="*80)
-
+print("\nStarting TAMP loop")
 while iteration < max_iterations:
     iteration += 1
-    print(f"\n{'='*80}")
-    print(f"ITERATION {iteration}")
-    print(f"{'='*80}")
+    print(f"iteration {iteration}")
     
-    # STEP 1: SYMBOLIC ABSTRACTION (Lifting)
-    print("\n[Step 1] Extracting predicates from current scene...")
+    # STEP 1: SYMBOLIC ABSTRACTION
+    print("\n1.Extracting predicates from current scene")
     current_predicates = extract_predicates(scene, franka, blocks_state)
     print_predicates(current_predicates)
     
@@ -132,24 +109,18 @@ while iteration < max_iterations:
         break
     
     # STEP 2: TASK PLANNING
-    print("\n[Step 2] Calling task planner (Pyperplan)...")
-    problem_string = generate_pddl_problem(
-        current_predicates,
-        goal_predicates,
-        blocks,
-        f"goal1_iter{iteration}"
-    )
+    print("\n2.Calling task planner (Pyperplan)")
+    problem_string = generate_pddl_problem(current_predicates,goal_predicates,blocks,f"goal1_iter{iteration}")
     
     # Debug: Save problem file
     debug_problem_file = f"/tmp/problem_iter{iteration}.pddl"
     with open(debug_problem_file, 'w') as f:
         f.write(problem_string)
-    print(f"  Problem saved to: {debug_problem_file}")
-    
+    print(f"Problem saved to: {debug_problem_file}")
     plan = call_pyperplan(domain_file, problem_string)
     
     if not plan:
-        print("no plan found! Cannot reach goal.")
+        print("no plan found. Cannot reach goal.")
         break
     
     print(f"\nPlan found ({len(plan)} actions):")
@@ -157,53 +128,44 @@ while iteration < max_iterations:
     
     # STEP 3: EXECUTE FIRST ACTION
     if not plan:
-        print("\nPlan is empty!")
+        print("\nPlan is empty.")
         break
     
     action_name, args = plan[0]
-    print(f"\n[Step 3] Executing: {action_name.upper()}({', '.join(args)})")
-    
+    print(f"\n3.Executing: {action_name.upper()}({', '.join(args)})")
     success = False
     
     if action_name == "pick-up":
         block_id = args[0]
         success = executor.pick_up(block_id)
-    
     elif action_name == "put-down":
         block_id = args[0]
         success = executor.put_down()
-    
     elif action_name == "stack":
         block_id = args[0]
         target_id = args[1]
         success = executor.stack_on(target_id,current_predicates)
-    
     elif action_name == "unstack":
         block_id = args[0]
         from_id = args[1]
-        success = executor.pick_up(block_id)  # Unstack = pick from stack
-    
+        success = executor.pick_up(block_id)
     else:
         print(f"Unknown action: {action_name}")
         break
     
     if not success:
-        print(f"Action failed! Re-planning...")
+        print(f"Action failed! Re-planning")
     else:
         print(f"Action completed successfully")
     
-    # Let scene settle
+    # To let scene settle
     for _ in range(50):
         scene.step()
     
     # STEP 4: RE-GROUND (loop back to Step 1)
-    print("\n[Step 4] Re-grounding predicates...")
+    print("\n4.Re-grounding predicates")
 
 # FINAL VERIFICATION
-print("\n" + "="*80)
-print("FINAL VERIFICATION")
-print("="*80)
-
 for _ in range(100):
     scene.step()
 
@@ -212,20 +174,16 @@ print_predicates(final_predicates)
 
 # Check goal
 if goal_predicates.issubset(final_predicates):
-    print("="*80)
-    print("SUCCESS! GOAL 1 COMPLETE!")
-    print("="*80)
-    print("\nTower 1: GREEN-RED-BLUE")
-    print("Tower 2: MAGENTA-YELLOW-CYAN")
+    print("Goal fully achieved!")
 else:
     print("Goal not fully achieved")
     missing = goal_predicates - final_predicates
     print(f"\nMissing predicates: {missing}")
 
 print(f"\nTotal iterations: {iteration}")
-print("\nPress Ctrl+C to exit...")
+print("\nCtrl+C to exit")
 try:
     while True:
         scene.step()
 except KeyboardInterrupt:
-    print("\nExiting...")
+    print("\nExiting simulation.")

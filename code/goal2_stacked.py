@@ -1,17 +1,10 @@
 """
-goal2_stacked_tamp.py
-
-Goal 2: Single 5-block tower - STACKED SCENARIO
+Task 2: Single 5-block tower - STACKED SCENARIO
 Starting with: All 6 blocks in one tower (R-G-B-Y-M-C from bottom to top)
-Goal: Build one 5-block tower
 
+Goal: Build one 5-block tower
 Tower: GREEN-RED-BLUE-YELLOW-MAGENTA (g-r-b-y-m)
 Cyan (c) remains on table
-
-Uses proper TAMP pipeline with Pyperplan
-
-Usage:
-    python goal2_stacked_tamp.py [gpu]
 """
 
 import sys
@@ -31,28 +24,17 @@ else:
 
 scene, franka, blocks_state = create_scene_stacked()
 
-# Strong gripper control
-franka.set_dofs_kp(
-    np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),
-)
-franka.set_dofs_kv(
-    np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),
-)
-franka.set_dofs_force_range(
-    np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),
-    np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),
-)
+# For Strong gripper control
+franka.set_dofs_kp(np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),)
+franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
+franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),)
 
-print("=" * 80)
-print("GOAL 2: ONE 5-BLOCK TOWER - STACKED SCENARIO")
-print("=" * 80)
-print("\nInitial: One 6-block tower (R-G-B-Y-M-C)")
-print("Goal: Build one 5-block tower (g-r-b-y-m) and c on table")
+print("\nScene and Franka robot initialized.")
 
-# Move to home
+# Our Home position (safe for 6-block setup)
 safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
 
-print("\nMoving to home...")
+print("\nMoving to home position")
 current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
@@ -80,41 +62,38 @@ goal_predicates = {
     "ON(b,r)",
     "ON(y,b)",
     "ON(m,y)",
+    # top block clear
     "CLEAR(m)",
-
+    # Cyan remains on table
     "ONTABLE(c)",
     "CLEAR(c)",
-
+    # Gripper
     "HANDEMPTY()"
 }
 
 blocks = ['r', 'g', 'b', 'y', 'm', 'c']
 
-print("\n" + "="*80)
-print("GOAL STATE:")
-print("="*80)
-print("\nTower: GREEN → RED → BLUE → YELLOW → MAGENTA")
+print("Goal state")
+print("\nTower: GREEN > RED > BLUE > YELLOW > MAGENTA")
 print("Cyan remains on table")
+print("\nGoal predicates:")
+
+for p in sorted(goal_predicates):
+    print(f"{p}")
 
 # TAMP EXECUTION LOOP
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
 domain_file = "/home/pinaka/RBE550Final/RBE550_final_project/code/blocksworld.pddl"
-
 max_iterations = 30
 iteration = 0
 
-print("\n" + "="*80)
-print("STARTING TAMP LOOP")
-print("="*80)
-
+print("\nStarting TAMP loop")
 while iteration < max_iterations:
     iteration += 1
-    print(f"\n{'='*80}")
-    print(f"ITERATION {iteration}")
-    print(f"{'='*80}")
+    print(f"iteration {iteration}")
 
     # STEP 1: SYMBOLIC ABSTRACTION
-    print("\n[Step 1] Extracting predicates from current scene...")
+    print("\n1.Extracting predicates from current scene")
     current_predicates = extract_predicates(scene, franka, blocks_state)
     print_predicates(current_predicates)
 
@@ -124,14 +103,10 @@ while iteration < max_iterations:
         break
 
     # STEP 2: TASK PLANNING
-    print("\n[Step 2] Calling task planner (Pyperplan)...")
-    problem_string = generate_pddl_problem(
-        current_predicates,
-        goal_predicates,
-        blocks,
-        f"goal2_stacked_iter{iteration}"
-    )
+    print("\n2.Calling task planner (Pyperplan)")
+    problem_string = generate_pddl_problem(current_predicates,goal_predicates,blocks,f"goal2_stacked_iter{iteration}")
 
+    # Debug: Save problem to file
     debug_problem_file = f"/tmp/problem_goal2_stacked_iter{iteration}.pddl"
     with open(debug_problem_file, "w") as f:
         f.write(problem_string)
@@ -140,7 +115,7 @@ while iteration < max_iterations:
     plan = call_pyperplan(domain_file, problem_string)
 
     if not plan:
-        print("No plan found!")
+        print("no plan found Cannot reach goal.")
         break
 
     print(f"\nPlan found ({len(plan)} actions):")
@@ -148,17 +123,14 @@ while iteration < max_iterations:
 
     # STEP 3: Execute FIRST action
     action_name, args = plan[0]
-    print(f"\n[Step 3] Executing: {action_name.upper()}({', '.join(args)})")
-
+    print(f"\n3.Executing: {action_name.upper()}({', '.join(args)})")
     success = False
 
     if action_name == "pick-up":
         block_id = args[0]
         success = executor.pick_up(block_id)
-
     elif action_name == "put-down":
         block_id = args[0]
-
         # Same safe positions as Goal 1 stacked
         safe_positions = {
             'r': (0.45, -0.45),
@@ -168,41 +140,34 @@ while iteration < max_iterations:
             'm': (0.65,  0.00),
             'c': (0.65,  0.15),
         }
-
         if block_id in safe_positions:
             x, y = safe_positions[block_id]
             success = executor.put_down(x, y)
         else:
             success = executor.put_down()
-
     elif action_name == "stack":
         block_id = args[0]
         target_id = args[1]
         success = executor.stack_on(target_id, current_predicates)
-
     elif action_name == "unstack":
         block_id = args[0]
         success = executor.pick_up(block_id)
-
     else:
         print(f"Unknown action: {action_name}")
         break
 
     if not success:
-        print("Action failed! Re-planning...")
+        print("Action failed! Re-planning")
     else:
         print("Action completed successfully")
 
     for _ in range(50):
         scene.step()
 
-    print("\n[Step 4] Re-grounding predicates...")
+    # STEP 4: re-ground 
+    print("\n4.Re-grounding predicates")
 
 # FINAL VERIFICATION
-print("\n" + "="*80)
-print("FINAL VERIFICATION")
-print("="*80)
-
 for _ in range(100):
     scene.step()
 
@@ -210,20 +175,16 @@ final_predicates = extract_predicates(scene, franka, blocks_state)
 print_predicates(final_predicates)
 
 if goal_predicates.issubset(final_predicates):
-    print("="*80)
-    print("SUCCESS! GOAL 2 (STACKED) COMPLETE!")
-    print("="*80)
-    print("\nFinal Tower: G → R → B → Y → M")
-    print("Cyan on table")
+    print("\nGoal fully achieved!")
 else:
     print("Goal not fully achieved")
     missing = goal_predicates - final_predicates
     print(f"\nMissing predicates: {missing}")
 
 print(f"\nTotal iterations: {iteration}")
-print("\nPress Ctrl+C to exit...")
+print("\nCtrl+C to exit")
 try:
     while True:
         scene.step()
 except KeyboardInterrupt:
-    print("\nExiting...")
+    print("\nExiting simulation.`")

@@ -1,6 +1,4 @@
 """
-task_planner.py
-
 Task Planning Module - Interfaces with Pyperplan
 """
 
@@ -9,9 +7,8 @@ import subprocess
 import tempfile
 from typing import Set, List, Tuple
 
-
+#Generate PDDL problem file from predicates
 def generate_pddl_problem(predicates: Set[str],goal_predicates: Set[str],blocks: List[str],problem_name: str = "blocks_problem") -> str:
-    """Generate PDDL problem file from predicates"""
     def format_pred(p: str) -> str:
         """Convert 'ON(r,g)' to '(on r g)'"""
         p = p.lower()
@@ -29,20 +26,13 @@ def generate_pddl_problem(predicates: Set[str],goal_predicates: Set[str],blocks:
     init_preds = '\n    '.join([format_pred(p) for p in predicates])
     goal_preds = '\n      '.join([format_pred(p) for p in goal_predicates])
     
-    problem = f"""
-    (define (problem {problem_name}) 
-    (:domain blocksworld) 
-    (:objects {' '.join(blocks)}) 
-    (:init {init_preds}) 
-    (:goal (and {goal_preds})))
-    """
+    problem = f"""(define (problem {problem_name}) (:domain blocksworld) (:objects {' '.join(blocks)}) (:init {init_preds}) (:goal (and {goal_preds})))"""
     return problem
 
 
 def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, List[str]]]:
     """
-    Call Pyperplan to solve planning problem
-    
+    Calling Pyperplan to solve planning problem
     Returns:
         List of (action_name, [args])
     """
@@ -52,14 +42,14 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
         f.write(problem_string)
     
     try:
-        print(f"  Domain: {domain_file}")
-        print(f"  Problem: {problem_file}")
+        print(f"Domain: {domain_file}")
+        print(f"Problem: {problem_file}")
         
         result = subprocess.run(['pyperplan', domain_file, problem_file],capture_output=True,text=True,timeout=30)
         
-        print("\n--- Pyperplan Output ---")
+        print("\nPyperplan Output")
         print(result.stdout)
-        print("--- End Output ---\n")
+        print("End Output\n")
         
         if result.returncode != 0:
             print("Pyperplan failed!")
@@ -108,9 +98,8 @@ def call_pyperplan(domain_file: str, problem_string: str) -> List[Tuple[str, Lis
         if os.path.exists(problem_file):
             os.remove(problem_file)
 
-
+# Convert plan to readable string
 def plan_to_string(plan: List[Tuple[str, List[str]]]) -> str:
-    """Convert plan to readable string"""
     if not plan:
         return "No plan"
     

@@ -1,3 +1,7 @@
+"""
+Motion planning interface using OMPL.
+"""
+
 import genesis as gs
 import numpy as np
 import torch
@@ -26,7 +30,7 @@ class PlannerInterface:
         self.attached_object = None
 
     def diagnose_bounds_violation(self, si, state):
-        # print the bounds the current state is violating
+        # diagnose print for the bounds the current state is violating
         violated_bounds = []
         for i_q in range(self.robot.n_qs):
             val = state[i_q]
@@ -99,9 +103,7 @@ class PlannerInterface:
             
             ou.setLogLevel(ou.LOG_ERROR)
         except:
-            gs.raise_exception(
-                    "Failed to import OMPL. Did you install? (For installation instructions, see https://genesis-world.readthedocs.io/en/latest/user_guide/overview/installation.html#optional-motion-planning)"
-            )
+            gs.raise_exception("Failed to import OMPL. Did you install? (For installation instructions, see https://genesis-world.readthedocs.io/en/latest/user_guide/overview/installation.html#optional-motion-planning)")
 
         supported_planners = [
             "PRM",
@@ -133,7 +135,6 @@ class PlannerInterface:
             gs.raise_exception("Invalid shape for `qpos_start` or `qpos_goal`.")
 
         #process joint limit 
-
         # ensure we use numpy float64 for bounds
         q_limit_lower = np.asarray(self.robot.q_limit[0], dtype=float)
         q_limit_upper = np.asarray(self.robot.q_limit[1], dtype=float)

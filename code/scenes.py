@@ -40,7 +40,6 @@ def _rand_xy(base, noise=0.05):
 
 def create_scene_6blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
     """Create the default demo scene (layout 1).
-
     Returns:
         scene, franka_adapter, blocks_state, end_effector
     """
@@ -49,7 +48,6 @@ def create_scene_6blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
     # basic geometry
     plane = scene.add_entity(gs.morphs.Plane())
     # add some random noise up to 5 cm in x/y
-
 
     posR = _rand_xy((0.65, 0.0, 0.02))
     posG = _rand_xy((0.65, 0.2, 0.02))
@@ -160,7 +158,6 @@ def create_scene_10blocks() -> Tuple[Any, Any, Dict[str, Any], Any]:
     plane = scene.add_entity(gs.morphs.Plane())
     # add some random noise up to 5 cm in x/y
 
-
     posR = (0.35, -0.45, 0.02)
     posG = (0.35, -0.30, 0.02)
     posB = (0.50, -0.45, 0.02)
@@ -240,7 +237,6 @@ def create_scene_10blocks2ln() -> Tuple[Any, Any, Dict[str, Any], Any]:
     # basic geometry
     plane = scene.add_entity(gs.morphs.Plane())
     # add some random noise up to 5 cm in x/y
-
 
     posR = (0.45, -0.40, 0.02)
     posG = (0.45, -0.20, 0.02)

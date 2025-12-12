@@ -1,26 +1,19 @@
 """
-motion_primitives.py - FIXED ARM DRIFT AND PLACEMENT
-
-Real issues fixed:
-1. ARM joints drift down under load → Continuously re-command target position
-2. Wrong stacking position calculation → Fixed math for placement
+Motion primitives for block manipulation with anti-drift control.
 """
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 import numpy as np
 from planning import PlannerInterface
 
-
 BLOCK_SIZE = 0.04
-TABLE_BLOCK_CENTER_Z = 0.02
+GROUND_BLOCK_CENTER_Z = 0.02
 SAFE_RETREAT_POS = np.array([0.7, 0.0, 0.5])
 MIN_APPROACH_HEIGHT = 0.180
 GRIPPER_OPEN_WIDTH = 0.04
 GRIPPER_CLOSED_WIDTH = 0.0
 GRIPPER_STEPS = 50
-
 
 @dataclass
 class MotionConfig:
@@ -34,15 +27,9 @@ class MotionConfig:
 
 
 class MotionPrimitiveExecutor:
-    """Motion primitives with anti-drift arm control."""
 
-    def __init__(
-        self,
-        scene: Any,
-        robot: Any,
-        blocks_state: Dict[str, Any],
-        config: Optional[MotionConfig] = None,
-    ):
+    def __init__(self,scene: Any,robot: Any,blocks_state: Dict[str, Any],config: Optional[MotionConfig] = None,):
+        
         self.scene = scene
         self.robot = robot
         self.blocks_state = blocks_state
@@ -55,6 +42,7 @@ class MotionPrimitiveExecutor:
         self.target_qpos = None
         self.tower_centers = {}
 
+    # block ID to key in blocks_state
     def _resolve_block_key(self, block_id: Any) -> str:
         s = str(block_id).strip().lower()
         if s in self.blocks_state:
@@ -62,46 +50,45 @@ class MotionPrimitiveExecutor:
         if s and s[0] in self.blocks_state:
             return s[0]
         raise KeyError(f"Unknown block: {block_id}")
-
+   
+    # Get block center position
     def _block_center(self, block_key: str) -> np.ndarray:
         pos = self.blocks_state[block_key].get_pos()
         if isinstance(pos, np.ndarray):
             return pos.astype(float)
         return np.array(pos, dtype=float)
-
+    
+    #ik solver for given pose
     def _ik_for_pose(self, pos: np.ndarray, quat: np.ndarray) -> Optional[np.ndarray]:
         hand = self.robot.get_link("hand")
         q = self.robot.inverse_kinematics(link=hand, pos=pos, quat=quat)
         return np.array(q, dtype=float) if q is not None else None
-
+    
+    # Execute planned path with retries
     def _plan_and_execute(self, q_goal: np.ndarray, attached_object: Any = None, description: str = "", retries: int = 2) -> bool:
-        """Execute path directly - FAST. Retry if needed."""
+        #Execute path directly. Retry if needed.
+        
         if description:
-            print(f"[motion] Planning: {description}")
+            print(f"motion: Planning {description}")
         
         for attempt in range(retries):
-            path = self.planner.plan_path(
-                qpos_goal=q_goal,
-                num_waypoints=self.config.num_waypoints,
-                attached_object=attached_object,
-                timeout=10.0,
-            )
+            path = self.planner.plan_path(qpos_goal=q_goal,num_waypoints=self.config.num_waypoints,attached_object=attached_object,timeout=10.0,)
             
             if path:
                 break
             
             if attempt < retries - 1:
-                print(f"[motion] Planning failed, retry {attempt + 1}/{retries - 1}...")
+                print(f"motion: Planning failed, retry {attempt + 1}/{retries - 1}")
                 # Small random perturbation might help
                 q_goal_perturbed = q_goal.copy()
                 q_goal_perturbed[:7] += np.random.uniform(-0.01, 0.01, 7)
                 q_goal = q_goal_perturbed
         
         if not path:
-            print("[motion]Planning failed after retries")
+            print("motion: Planning failed after retries")
             return False
 
-        print(f"[motion] Executing...")
+        print(f"motion: Executing")
         
         # Direct execution
         for waypoint in path:
@@ -127,9 +114,9 @@ class MotionPrimitiveExecutor:
             self.scene.step()
         
         return True
-
+    
+    #We Actively hold current position to prevent drift
     def _hold_position(self, duration_seconds: float = 0.5):
-        """Actively hold current position to prevent drift."""
         if self.target_qpos is None:
             current = self.robot.get_qpos()
             if hasattr(current, "cpu"):
@@ -142,7 +129,8 @@ class MotionPrimitiveExecutor:
         for i in range(steps):
             self.robot.control_dofs_position(self.target_qpos)
             self.scene.step()
-
+    
+    # Interpolate gripper opening/closing
     def _interpolate_gripper(self, target_width: float) -> None:
         q_start = self.robot.get_qpos()
         if hasattr(q_start, "clone"):
@@ -159,15 +147,14 @@ class MotionPrimitiveExecutor:
             self.robot.control_dofs_position(q)
             self.scene.step()
 
+    # Open gripper method
     def open_gripper(self) -> None:
-        print("[motion] Opening gripper...")
         self.gripper_holding = False
         self._interpolate_gripper(self.config.gripper_open_width)
-        print("[motion] Gripper opened")
+        print("motion: Gripper opened")
 
-    def close_gripper(self) -> None:
-        print("[motion] Closing gripper...")
-        
+    # Close gripper method
+    def close_gripper(self) -> None:        
         # Get current position BEFORE closing
         current_q = self.robot.get_qpos()
         if hasattr(current_q, "cpu"):
@@ -194,15 +181,16 @@ class MotionPrimitiveExecutor:
             self.scene.step()
         
         self.target_qpos = target_q
-        print("[motion]Gripper closed")
+        print("motion: Gripper closed")
 
-
+    # Pick up block method
     def pick_up(self, block_id: Any) -> bool:
         key = self._resolve_block_key(block_id)
         center = self._block_center(key)
 
-        print(f"\n[motion] PICK-UP: '{key}'")
-
+        print(f"\nmotion: PICK-UP: '{key}'")
+        
+        # Calculate approach and grasp positions
         top_of_block_z = center[2] + (BLOCK_SIZE / 2.0)
         approach_pos = center.copy()
         approach_pos[2] = top_of_block_z + self.config.min_approach_height
@@ -241,19 +229,19 @@ class MotionPrimitiveExecutor:
             self.robot.control_dofs_position(q_interp)
             self.scene.step()
 
-        print("[motion] PICK-UP SUCCESS")
+        print("motion: PICK-UP SUCCESS")
         return True
-
+    
+    # Put down block method
     def put_down(self, x: float = 0.50, y: float = 0.0) -> bool:
-        """Place held block on table at position (x, y).
-        
+        """Place held block on ground at position (x, y). 
         Default: (0.50, 0.0) - centered below robot for stability
         """
         if not self.gripper_holding:
-            print("[motion] Not holding any block!")
+            print("motion: Not holding any block!")
             return False
         
-        print(f"\n[motion] PUT-DOWN at ({x:.2f}, {y:.2f})")
+        print(f"\nmotion: PUT-DOWN at ({x:.2f}, {y:.2f})")
         
         # Find held block
         hand = self.robot.get_link("hand")
@@ -268,9 +256,9 @@ class MotionPrimitiveExecutor:
                 break
         
         # Calculate placement position
-        place_center = np.array([x, y, TABLE_BLOCK_CENTER_Z])
+        place_center = np.array([x, y, GROUND_BLOCK_CENTER_Z])
         place_gripper = place_center.copy()
-        place_gripper[2] = TABLE_BLOCK_CENTER_Z + self.config.grasp_offset
+        place_gripper[2] = GROUND_BLOCK_CENTER_Z + self.config.grasp_offset
         
         # Approach position (above placement)
         approach_pos = place_gripper.copy()
@@ -322,83 +310,7 @@ class MotionPrimitiveExecutor:
                 self.robot.control_dofs_position(q)
                 self.scene.step()
         
-        print("[motion] PUT-DOWN SUCCESS")
-        return True
-
-    def arrange_base_blocks(self, block_ids: list, target_center: tuple = None) -> bool:
-        """
-        Arrange 4 blocks into a tight 2x2 square by picking and placing them.
-        Blocks are placed close enough that they touch (4cm spacing center-to-center).
-        
-        Args:
-            block_ids: List of 4 block IDs to arrange (e.g., ['r', 'g', 'b', 'y'])
-            target_center: Optional (x, y) center for the square. Default: (0.55, 0.0)
-            
-        Returns:
-            bool: True if successful
-        """
-        if len(block_ids) != 4:
-            print(f"[motion] arrange_base_blocks requires 4 blocks, got {len(block_ids)}")
-            return False
-        
-        print(f"[motion] ARRANGING 2x2 BASE: {block_ids}")
-        
-        if target_center is None:
-            target_center = (0.55, 0.0)
-        
-        target_center = np.array(target_center)
-        
-        # Calculate target positions for 2x2 square with blocks TOUCHING
-        # Block size is 0.04m, so blocks touching means 0.04m spacing center-to-center
-        half_block = BLOCK_SIZE / 2.0  # 0.02m = 2cm
-        
-        target_positions = [
-            (target_center[0] - half_block, target_center[1] - half_block),  # Back-left
-            (target_center[0] + half_block, target_center[1] - half_block),  # Back-right
-            (target_center[0] - half_block, target_center[1] + half_block),  # Front-left
-            (target_center[0] + half_block, target_center[1] + half_block),  # Front-right
-        ]
-        
-        print(f"[motion] Target center: ({target_center[0]:.3f}, {target_center[1]:.3f})")
-        print(f"[motion] Blocks will be placed {BLOCK_SIZE*100:.1f}cm apart (touching)")
-        
-        # Pick up and place each block at exact positions
-        for idx, bid in enumerate(block_ids):
-            key = self._resolve_block_key(bid)
-            target_xy = target_positions[idx]
-            
-            print(f"\n[motion] >> Block {idx+1}/4: {key.upper()}")
-            print(f"[motion]    Target: ({target_xy[0]:.4f}, {target_xy[1]:.4f})")
-            
-            # Pick up block
-            if not self.pick_up(key):
-                print(f"[motion]  Failed to pick up {key}")
-                return False
-            
-            # Place at exact target position
-            if not self.put_down(x=target_xy[0], y=target_xy[1]):
-                print(f"[motion]  Failed to place {key}")
-                return False
-            
-            # Let physics settle
-            for _ in range(80):
-                self.scene.step()
-            
-            # Verify placement
-            actual_pos = self._block_center(key)
-            print(f"[motion]    ✓ Placed at ({actual_pos[0]:.4f}, {actual_pos[1]:.4f}, z={actual_pos[2]:.4f})")
-        
-        # Final verification
-        print(f"\n[motion] ========================================")
-        print(f"[motion] FINAL BASE CONFIGURATION:")
-        print(f"[motion] ========================================")
-        
-        for bid in block_ids:
-            key = self._resolve_block_key(bid)
-            pos = self._block_center(key)
-            print(f"[motion]   {key.upper()}: ({pos[0]:.4f}, {pos[1]:.4f}, z={pos[2]:.4f})")
-        
-        print(f"\n[motion]BASE ARRANGEMENT COMPLETE - Blocks are touching!")
+        print("motion: PUT-DOWN SUCCESS")
         return True
 
     def stack_on(self, target_block_id: Any,predicates=None) -> bool:
@@ -501,14 +413,14 @@ class MotionPrimitiveExecutor:
             self.scene.step()
         
         # Hold position to let block settle
-        print("[motion] Holding position for stability...")
+        print("motion: Holding position for stability")
         hold_q = self.robot.get_qpos()
         if hasattr(hold_q, "cpu"):
             hold_q = hold_q.cpu().numpy().copy()
         else:
             hold_q = np.array(hold_q, dtype=float, copy=True)
         
-        # Hold for 100 steps (~1 second)
+        # Hold for 100 steps
         for _ in range(100):
             self.robot.control_dofs_position(hold_q)
             self.scene.step()
@@ -535,8 +447,9 @@ class MotionPrimitiveExecutor:
                 self.robot.control_dofs_position(q)
                 self.scene.step()
         
-        print("[motion]STACK COMPLETE")
+        print("motion:STACK COMPLETE")
         return True
+    
     def _find_base_block(self, block_id, predicates):
         """
         From target block, walk up ON(x,y) predicates until reaching ONTABLE(base).
@@ -551,7 +464,7 @@ class MotionPrimitiveExecutor:
             for p in predicates:
                 if p.startswith("ON("):
                     # Parse ON(a,b)
-                    inside = p[3:-1]  # remove ON( )
+                    inside = p[3:-1]
                     a, b = inside.split(",")
                     
                     if a == current:
@@ -561,5 +474,5 @@ class MotionPrimitiveExecutor:
                         break
             
             if not found_parent:
-                # No ON(a,b) found → must be base (ONTABLE)
+                # No ON(a,b) found > must be base (ONTABLE)
                 return current

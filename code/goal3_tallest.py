@@ -1,20 +1,14 @@
 """
-goal3_scattered_tamp.py
-
-Goal 3: Tallest Tower - SCATTERED SCENARIO
+Task 3: Tallest Tower - SCATTERED SCENARIO
 Starting with: 10 blocks scattered on table
-Goal: Build the tallest possible tower (all 10 blocks stacked)
 
-Strategy:
+Our Strategy:
 - Build from center outward (pick closest blocks first)
 - No specific color order required
 - Stack all 10 blocks: r, g, b, y, o, r2, g2, b2, y2, o2
 - TAMP will automatically re-plan if blocks fall
 
-Uses proper TAMP pipeline with Pyperplan
-
-Usage:
-    python goal3_scattered_tamp.py [gpu]
+Goal: Build the tallest possible tower (all 10 blocks stacked)
 """
 
 import sys
@@ -34,29 +28,17 @@ else:
 
 scene, franka, blocks_state = create_scene_10blocks2ln()
 
-# Strong gripper control
-franka.set_dofs_kp(
-    np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),
-)
-franka.set_dofs_kv(
-    np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),
-)
-franka.set_dofs_force_range(
-    np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),
-    np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),
-)
+# For Strong gripper control
+franka.set_dofs_kp(np.array([4500, 4500, 3500, 3500, 2000, 2000, 2000, 2000, 2000]),)
+franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
+franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),)
 
-print("="*80)
-print("GOAL 3: TALLEST TOWER - SCATTERED SCENARIO")
-print("="*80)
-print("\nInitial: 10 blocks scattered on table")
-print("Goal: Build tallest possible tower (all 10 blocks)")
-print("Strategy: Build from center outward, no color order required")
+print("\nScene and Franka robot initialized.")
 
-# Move to home
+# Our Home position (safe for 6-block setup)
 safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
 
-print("\nMoving to home...")
+print("\nMoving to home position")
 current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
@@ -78,12 +60,7 @@ for _ in range(100):
     scene.step()
 
 # DETERMINE BUILD ORDER - Sort blocks by distance from center
-
 CENTER = np.array([0.50, 0.0])
-
-print("\n" + "="*80)
-print("DETERMINING BUILD ORDER (closest to center first)")
-print("="*80)
 
 # Calculate distances
 block_distances = []
@@ -95,67 +72,46 @@ for block_id in blocks_state.keys():
 # Sort by distance (closest first)
 block_distances.sort(key=lambda x: x[1])
 
-print("\nBlock order (center → outward):")
+print("\nBlock order (center > outward):")
 for i, (bid, dist) in enumerate(block_distances):
     print(f"  {i+1:2d}. {bid.upper():3s}: {dist:.3f}m from center")
 
 # Build order
 build_order = [x[0] for x in block_distances]
-
 # INCREMENTAL GOAL STRATEGY
 # Instead of planning all 10 blocks at once (too complex for Pyperplan),
 # we build incrementally: aim for current_height + 1
-
-print("\n" + "="*80)
-print("INCREMENTAL BUILDING STRATEGY")
-print("="*80)
-print("\nInstead of planning all 10 blocks at once,")
-print("we'll build incrementally: add one block at a time")
-print("\nTarget: Keep building until we have 10 blocks stacked")
-
+print("\nIncremental build strategy:")
 # Build order determined by distance
 build_order = [x[0] for x in block_distances]
 base_block = build_order[0]
-
 # All blocks for PDDL problem
 blocks = list(blocks_state.keys())
 
-print(f"\nBase block: {base_block.upper()}")
-print("Remaining blocks will be added incrementally")
+print(f"\nBase block: {base_block.upper()}, Remaining blocks will be added incrementally")
 
 # TAMP EXECUTION LOOP
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
-
 domain_file = "/home/pinaka/RBE550Final/RBE550_final_project/code/blocksworld.pddl"
 max_iterations = 60  # More iterations for incremental building
 iteration = 0
 
-# Track tower progress
+# To track tower progress
 current_tower_height = 0
 target_tower_height = 8  # Reduced from 10 - more realistic for stability
 
-# Note: 8 blocks = 32cm is challenging but achievable
-# 10 blocks = 40cm is very difficult due to physics instability
-
-print("\n" + "="*80)
-print("STARTING TAMP LOOP")
-print("="*80)
-
+print("\nStarting TAMP loop")
 while iteration < max_iterations and current_tower_height < target_tower_height:
     iteration += 1
-    print(f"\n{'='*80}")
-    print(f"ITERATION {iteration} | Tower: {current_tower_height}/{target_tower_height} blocks")
-    print(f"{'='*80}")
+    print(f"Iteration {iteration} | Tower: {current_tower_height}/{target_tower_height} blocks")
     
     # STEP 1: SYMBOLIC ABSTRACTION
-    print("\n[Step 1] Extracting predicates from current scene...")
+    print("\n1.Extracting predicates from current scene")
     current_predicates = extract_predicates(scene, franka, blocks_state)
     print_predicates(current_predicates)
-    
     # Count current tower height
     tower_blocks = []
     current_check = base_block
-    
     # Check if base is on table
     if f"ONTABLE({base_block})" in current_predicates:
         # Walk up the tower
@@ -171,7 +127,7 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
                         current_check = a
                         found_next = True
                         break
-            
+        
             if not found_next:
                 break
         
@@ -180,8 +136,7 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
     else:
         current_tower_height = 0
         print(f"\nNo tower yet (base not placed)")
-    
-    # Check if target reached
+    # to check if target reached
     if current_tower_height >= target_tower_height:
         print(f"\nTarget reached: {current_tower_height} blocks!")
         break
@@ -190,7 +145,7 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
     # Goal: Build tower with current_height + 1 blocks
     next_height = current_tower_height + 1
     
-    print(f"\n[Step 2] Setting incremental goal: {next_height} blocks")
+    print(f"\n2. Setting incremental goal: {next_height} blocks")
     
     # Build goal predicates for next_height blocks
     goal_predicates = {
@@ -208,15 +163,9 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
         goal_predicates.add(f"CLEAR({top})")
     
     # STEP 3: TASK PLANNING
-    print(f"\n[Step 3] Calling task planner (Pyperplan)...")
-    print(f"  Goal: Build {next_height}-block tower")
-    
-    problem_string = generate_pddl_problem(
-        current_predicates,
-        goal_predicates,
-        blocks,
-        f"goal3_iter{iteration}_h{next_height}"
-    )
+    print("\n3.Calling task planner (Pyperplan)")
+    print(f"Goal: Build {next_height}-block tower")
+    problem_string = generate_pddl_problem(current_predicates,goal_predicates,blocks,f"goal3_iter{iteration}_h{next_height}")
     
     debug_problem_file = f"/tmp/problem_goal3_iter{iteration}_h{next_height}.pddl"
     with open(debug_problem_file, 'w') as f:
@@ -227,9 +176,8 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
     
     if not plan:
         print("No plan found!")
-        print("   This might mean the tower is unstable or goal is unreachable")
         break
-    
+
     print(f"\nPlan found ({len(plan)} actions):")
     print(plan_to_string(plan))
     
@@ -239,10 +187,9 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
         break
     
     action_name, args = plan[0]
-    print(f"\n[Step 3] Executing: {action_name.upper()}({', '.join(args)})")
-    
+    print(f"\n3.Executing: {action_name.upper()}({', '.join(args)})")
     success = False
-    
+
     if action_name == "pick-up":
         block_id = args[0]
         success = executor.pick_up(block_id)
@@ -263,41 +210,37 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
             'y2': (0.65, 0.10),
             'O2': (0.65, 0.20),
         }
-        
         if block_id in safe_positions:
             x, y = safe_positions[block_id]
             success = executor.put_down(x, y)
         else:
             # Default away from center
             success = executor.put_down(0.35, 0.0)
-    
     elif action_name == "stack":
         block_id = args[0]
         target_id = args[1]
         success = executor.stack_on(target_id, current_predicates)
-    
     elif action_name == "unstack":
         block_id = args[0]
         from_id = args[1]
         success = executor.pick_up(block_id)
-    
     else:
         print(f"Unknown action: {action_name}")
         break
     
     if not success:
-        print(f"Action failed! Re-planning...")
+        print(f"Action failed! Re-planning")
     else:
         print(f"Action completed successfully")
         
         # STABILITY CHECK: For stack actions, verify tower still stands
         if action_name == "stack" and success:
-            print("\n[Stability Check] Verifying tower integrity...")
-            
+            print("\nVerifying tower integrity.")
+            # Let scene settle more for taller towers
             # Extra settling time - more for taller towers
             if current_tower_height >= 5:
                 settling_time = 200 + (current_tower_height - 5) * 50
-                print(f"  Tall tower detected: extra settling time ({settling_time} steps)")
+                print(f"Tall tower detected: extra settling time ({settling_time} steps)")
             else:
                 settling_time = 150
             
@@ -306,13 +249,12 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
             
             # Re-check predicates
             check_predicates = extract_predicates(scene, franka, blocks_state)
-            
+
             # Check if the stack we just made still exists
             expected_pred = f"ON({args[0]},{args[1]})"
-            
+    
             if expected_pred not in check_predicates:
-                print(f"Stack collapsed! Block {args[0]} fell off {args[1]}")
-                print("   TAMP will re-plan and try again...")
+                print(f"Stack collapsed! Block {args[0]} fell off {args[1]}, TAMP will re-plan.")
                 
                 # Count how many blocks are still in tower
                 temp_check = base_block
@@ -330,22 +272,17 @@ while iteration < max_iterations and current_tower_height < target_tower_height:
                                     break
                         if not found:
                             break
-                    print(f"   Tower now has {temp_count} blocks (was {current_tower_height})")
+                    print(f"Tower now has {temp_count} blocks (was {current_tower_height})")
             else:
                 print(f"Tower stable: {expected_pred}")
     
     # Let scene settle
     for _ in range(50):
         scene.step()
-    
     # STEP 5: RE-GROUND
-    print("\n[Step 5] Re-grounding predicates...")
+    print("\n5.Re-grounding predicates")
 
 # FINAL VERIFICATION
-print("\n" + "="*80)
-print("FINAL VERIFICATION")
-print("="*80)
-
 for _ in range(200):
     scene.step()
 
@@ -360,7 +297,7 @@ current_check = base_block
 while True:
     tower_blocks.append(current_check)
     
-    # Find what's on top of current_check
+    # to find what's on top of current_check
     found_next = False
     for pred in final_predicates:
         if pred.startswith("ON("):
@@ -381,18 +318,11 @@ print(f"\nTower Statistics:")
 print(f"  Base block: {base_block.upper()}")
 print(f"  Blocks in tower: {tower_height}")
 print(f"  Tower height: {physical_height:.3f}m ({physical_height*100:.1f}cm)")
-print(f"  Target: 10 blocks = 0.40m (40cm)")
-
 # Check goal
 if goal_predicates.issubset(final_predicates):
-    print("\n" + "="*80)
-    print("SUCCESS! GOAL 3 (SCATTERED) COMPLETE!")
-    print("="*80)
-    print(f"\nBuilt {tower_height}-block tower!")
-    print(f"Height: {physical_height*100:.1f}cm")
-    
+    print("\nGoal fully achieved!")
     if tower_height == 10:
-        print("\nPERFECT! All 10 blocks stacked!")
+        print("\perfect! All 10 blocks stacked!")
 else:
     print("\nGoal not fully achieved")
     missing = goal_predicates - final_predicates
@@ -400,9 +330,9 @@ else:
     print(f"\nBut tower has {tower_height} blocks!")
 
 print(f"\nTotal iterations: {iteration}")
-print("\nPress Ctrl+C to exit...")
+print("\nCtrl+C to exit")
 try:
     while True:
         scene.step()
 except KeyboardInterrupt:
-    print("\nExiting...")
+    print("\nExiting simulation.")
