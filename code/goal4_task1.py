@@ -37,11 +37,12 @@ franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
 franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([87, 87, 87, 87, 12, 12, 12, 200, 200]),)
 
 # Move to safe home position
-safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
+safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.039, 0.039], dtype=float)
 
 current = franka.get_qpos()
 if hasattr(current, "cpu"):
     current = current.cpu().numpy()
+
 
 for i in range(200):
     alpha = (i + 1) / 200.0
@@ -56,14 +57,14 @@ for _ in range(50):
     scene.step()
 
 # Let physics settle
-for _ in range(100):
+for _ in range(200):
     scene.step()
 
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
 domain_file = os.path.join(os.path.dirname(__file__), "pentagon_blocksworld.pddl")
 
 CENTER_X = 0.50
-CENTER_Y = 0.0
+CENTER_Y = 0.1
 PENTAGON_RADIUS = 0.06  # tuned to get nice pentagon
 
 def get_pentagon_position(index, center_x, center_y, radius, rotation_offset=0.0):
@@ -132,7 +133,7 @@ def place_held_block_on_base_slot(slot_name: str) -> bool:
         return False
 
     x, y, rot = BASE_SLOT_GEOM[slot_name]
-    print(f"Exec: put-down-base at {slot_name} → ({x:.3f}, {y:.3f}), rot={rot:.1f}")
+    print(f"Exec: put-down-base at {slot_name} > ({x:.3f}, {y:.3f}), rot={rot:.1f}")
     return executor.put_down_sp(x=x, y=y, rotation_z=rot)
 
 

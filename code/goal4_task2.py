@@ -96,7 +96,7 @@ franka.set_dofs_kv(np.array([450, 450, 350, 350, 200, 200, 200, 200, 200]),)
 franka.set_dofs_force_range(np.array([-87, -87, -87, -87, -12, -12, -12, -200, -200]),np.array([ 87,  87,  87,  87,  12,  12,  12,  200,  200]),)
 
 # Move to home
-safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.04, 0.04], dtype=float)
+safe_home = np.array([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.039, 0.039], dtype=float)
 
 print("\nMoving to home")
 current = franka.get_qpos()
@@ -389,7 +389,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         success = False
         if action_name == "pick-up":
             block_id = args[0]
-            print(f"  → Picking up block '{block_id}'")
+            print(f"Picking up block '{block_id}'")
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
