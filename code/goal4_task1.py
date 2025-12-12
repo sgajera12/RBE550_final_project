@@ -19,7 +19,7 @@ import genesis as gs
 from scenes import create_scene_10blocks
 from motion_primitives import MotionPrimitiveExecutor
 from predicates import extract_predicates, print_predicates
-from task_planner import generate_pddl_problem, call_pyperplan_sp1, plan_to_string
+from task_planner import generate_pddl_problem_sp1, call_pyperplan_sp1, plan_to_string
 
 BLOCK_SIZE = 0.04  # 4cm blocks
 
@@ -277,7 +277,7 @@ print("\nBASE GOAL PREDICATES:")
 for p in sorted(goal_base):
     print(" ", p)
 
-problem_base = generate_pddl_problem(preds_base,goal_base,objects_base,problem_name="pentagon_base",domain_name="pentagonworld",)
+problem_base = generate_pddl_problem_sp1(preds_base,goal_base,objects_base,problem_name="pentagon_base",domain_name="pentagonworld",)
 print("\nCalling Pyperplan for BASE plan")
 plan_base = call_pyperplan_sp1(domain_file, problem_base)
 
@@ -347,7 +347,7 @@ print("\nTOP GOAL PREDICATES:")
 for p in sorted(goal_top):
     print(" ", p)
 
-problem_top = generate_pddl_problem(
+problem_top = generate_pddl_problem_sp1(
     preds_top,
     goal_top,
     objects_top,

@@ -29,6 +29,65 @@ def generate_pddl_problem(predicates: Set[str],goal_predicates: Set[str],blocks:
     
     problem = f"""(define (problem {problem_name}) (:domain blocksworld) (:objects {' '.join(blocks)}) (:init {init_preds}) (:goal (and {goal_preds})))"""
     return problem
+
+def generate_pddl_problem_sp1(
+    predicates: Set[str],
+    goal_predicates: Set[str],
+    objects: List[str],
+    problem_name: str = "blocks_problem",
+    domain_name: str = "blocksworld",
+) -> str:
+    """
+    Generate a PDDL problem file string from predicates.
+
+    Args:
+        predicates:      Current state predicates (INIT).
+        goal_predicates: Goal state predicates.
+        objects:         List of *all* PDDL objects (blocks, slots, etc.).
+        problem_name:    Name of the problem.
+        domain_name:     Name of the domain, must match (define (domain ...))
+                         in your .pddl domain file (e.g. 'blocksworld' or
+                         'pentagonworld').
+
+    Returns:
+        A PDDL problem file as a string.
+    """
+
+    def format_pred(p: str) -> str:
+        """Convert 'ON(r,g)' to '(on r g)' etc."""
+        p = p.lower()
+        if "(" not in p:
+            return p
+
+        pred_name = p.split("(")[0]
+        args = p.split("(")[1].rstrip(")").split(",")
+
+        if args[0]:
+            return f"({pred_name} {' '.join(args)})"
+        else:
+            return f"({pred_name})"
+
+    init_preds = "\n    ".join([format_pred(p) for p in predicates])
+    goal_preds = "\n      ".join([format_pred(p) for p in goal_predicates])
+
+    problem = f"""(define (problem {problem_name})
+  (:domain {domain_name})
+
+  (:objects {' '.join(objects)})
+
+  (:init
+    {init_preds}
+  )
+
+  (:goal
+    (and
+      {goal_preds}
+    )
+  )
+)
+"""
+    return problem
+
 def generate_pddl_problem_sp2(
     predicates: Set[str],
     goal_predicates: Set[str],

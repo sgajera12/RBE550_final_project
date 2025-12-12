@@ -4,7 +4,7 @@
 
 (define (domain blocksworld-directional)
   (:requirements :strips :typing)
-  
+
   (:types block)
   
   (:predicates (on ?x - block ?y - block) (ontable ?x - block) (clear ?x - block) (holding ?x - block) (handempty) (adjacent-x ?x - block ?y - block) (adjacent-y ?x - block ?y - block))
@@ -27,14 +27,14 @@
   (:action put-down-adjacent-x
     :parameters (?x - block ?y - block)
     :precondition (and (holding ?x) (ontable ?y))
-    :effect (and (not (holding ?x)) (clear ?x) (handempty) (ontable ?x) (adjacent-x ?x ?y) (+X direction))
+    :effect (and (not (holding ?x)) (clear ?x) (handempty) (ontable ?x) (adjacent-x ?x ?y))
   )
   
   ;; Put down a held block adjacent to another block in Y direction (+Y, in front)
   (:action put-down-adjacent-y
     :parameters (?x - block ?y - block)
     :precondition (and(holding ?x) (ontable ?y))
-    :effect (and (not (holding ?x))(clear ?x) (handempty) (ontable ?x) (adjacent-y ?x ?y) (+Y direction))
+    :effect (and (not (holding ?x))(clear ?x) (handempty) (ontable ?x) (adjacent-y ?x ?y))
   )
   
   ;; Stack a held block on top of another block

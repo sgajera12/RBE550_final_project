@@ -121,25 +121,18 @@ for _ in range(100):
 executor = MotionPrimitiveExecutor(scene, franka, blocks_state)
 domain_file = os.path.join(os.path.dirname(__file__), "blocksworld_directional.pddl")
 
-print("\n" + "=" * 80)
-print("PHASE 1: BASE CONSTRUCTION (DIRECTIONAL ADJACENCY)")
-print("=" * 80)
+print("phase 1")
 print("\nGoal: Arrange 4 blocks in 2x2 grid:")
-print("  [r2][g2]  ← Back row")
-print("  [r1][g1]  ← Front row")
 
 phase1_goal = {
     # All blocks on table
     "ONTABLE(r1)", "ONTABLE(g1)", "ONTABLE(r2)", "ONTABLE(g2)",
-    
-    # X-direction adjacency (horizontal: left → right)
-    "ADJACENT-X(g1,r1)",  # g1 is RIGHT of r1
-    "ADJACENT-X(g2,r2)",  # g2 is RIGHT of r2
-    
-    # Y-direction adjacency (vertical: back → front)
-    "ADJACENT-Y(r1,r2)",  # r1 is FRONT of r2
-    "ADJACENT-Y(g1,g2)",  # g1 is FRONT of g2
-    
+    # X-direction adjacency (horizontal: left> right)
+    "ADJACENT-X(g1,r1)", # g1 is RIGHT of r1
+    "ADJACENT-X(g2,r2)", # g2 is RIGHT of r2
+    # Y-direction adjacency (vertical: back > front)
+    "ADJACENT-Y(r1,r2)", # r1 is FRONT of r2
+    "ADJACENT-Y(g1,g2)", # g1 is FRONT of g2
     # All blocks clear and hand empty
     "CLEAR(r1)", "CLEAR(g1)", "CLEAR(r2)", "CLEAR(g2)",
     "HANDEMPTY()",
@@ -157,9 +150,7 @@ replan_attempt = 0
 while replan_attempt < MAX_REPLAN_ATTEMPTS:
     replan_attempt += 1
     
-    print(f"\n{'=' * 80}")
     print(f"PHASE 1 - ATTEMPT {replan_attempt}")
-    print(f"{'=' * 80}")
 
     # Get current state
     current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
@@ -177,7 +168,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         break
 
     # PLANNING
-    print("\n[Planning] Generating complete plan for Phase 1...")
+    print("\nPlanning: Generating complete plan for Phase 1...")
     
     problem_string = generate_pddl_problem_sp2(
         relevant_predicates,
@@ -190,7 +181,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
     debug_problem_file = f"/tmp/phase1_problem_attempt{replan_attempt}.pddl"
     with open(debug_problem_file, "w") as f:
         f.write(problem_string)
-    print(f"  Problem saved to: {debug_problem_file}")
+    print(f"Problem saved to: {debug_problem_file}")
 
     plan = call_pyperplan_sp2(domain_file, problem_string)
 
@@ -198,26 +189,17 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         print("No plan found for Phase 1!")
         break
 
-    print(f"\n Complete plan generated with {len(plan)} actions")
-    print("\n" + "="*60)
+    print(f"\nComplete plan generated with {len(plan)} actions")
     print("PHASE 1 COMPLETE PLAN:")
-    print("="*60)
     print(plan_to_string(plan))
-    print("="*60)
     
     # EXECUTION
-    print(f"\n[Execution] Executing complete plan ({len(plan)} actions)...")
-    print("Note: No replanning between actions!")
-    
+    print(f"\nExecution: Executing complete plan ({len(plan)} actions)")    
     plan_success = True
     
     for action_idx, (action_name, args) in enumerate(plan, 1):
-        print(f"\n{'─' * 60}")
         print(f"ACTION {action_idx}/{len(plan)}: {action_name.upper()}({', '.join(args)})")
-        print(f"{'─' * 60}")
-
         success = False
-
         if action_name == "pick-up":
             block_id = args[0]
             print(f"Picking up block '{block_id}'")
@@ -226,7 +208,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             if adjacent:
                 print(f"Adjacent blocks: {adjacent}")
                 wrist_rotation = calculate_gripper_rotation(adjacent)
-                print(f" Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
+                print(f"Gripper rotation: {np.degrees(wrist_rotation):.0f}°")
                 success = executor.pick_up_sp(block_id, wrist_rotation=wrist_rotation)
             else:
                 success = executor.pick_up(block_id)
@@ -239,25 +221,25 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             # Generic adjacent (for compatibility)
             block_id = args[0]
             adjacent_to = args[1]
-            print(f"  → Placing '{block_id}' adjacent to '{adjacent_to}'")
+            print(f"Placing '{block_id}' adjacent to '{adjacent_to}'")
             success = executor.put_down_adjacent_to(adjacent_to, current_predicates)
         
         elif action_name == "put-down-adjacent-x":
             block_id = args[0]
             adjacent_to = args[1]
-            print(f"  → Placing '{block_id}' to RIGHT of '{adjacent_to}' (+X direction)")
+            print(f"Placing '{block_id}' to RIGHT of '{adjacent_to}' (+X direction)")
             success = executor.put_down_adjacent_x(adjacent_to, direction="+x")
         
         elif action_name == "put-down-adjacent-y":
             block_id = args[0]
             adjacent_to = args[1]
-            print(f"  → Placing '{block_id}' in FRONT of '{adjacent_to}' (+Y direction)")
+            print(f"Placing '{block_id}' in FRONT of '{adjacent_to}' (+Y direction)")
             success = executor.put_down_adjacent_y(adjacent_to, direction="+y")
 
         elif action_name == "unstack":
             block_id = args[0]
             from_id = args[1]
-            print(f"  → Unstacking '{block_id}' from '{from_id}'")
+            print(f"Unstacking '{block_id}' from '{from_id}'")
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
@@ -284,7 +266,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         for _ in range(200):
             scene.step()
         
-        # **NEW: Check if goal already satisfied after this action**
+        # Check if goal already satisfied after this action
         current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
         if phase1_goal.issubset(current_predicates):
             print(f"\nGOAL ACHIEVED after action {action_idx}/{len(plan)}! Skipping remaining actions.")
@@ -294,15 +276,11 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             scene.step()
     
     # CHECK GOAL
-    print("\n" + "=" * 60)
-    print("PHASE 1: Checking goal satisfaction...")
-    print("=" * 60)
     
     for _ in range(100):
         scene.step()
     
     final_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
-    
     if phase1_goal.issubset(final_predicates):
         print("PHASE 1 GOAL ACHIEVED!")
         break
@@ -314,17 +292,14 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             print(f"  {p}")
         
         if replan_attempt < MAX_REPLAN_ATTEMPTS:
-            print(f"\nReplanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})...")
+            print(f"\nReplanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})")
         else:
             print("\nMax replan attempts reached")
             break
 
 
 # Final Phase 1 verification
-print("\n" + "=" * 80)
 print("PHASE 1 FINAL VERIFICATION")
-print("=" * 80)
-
 phase1_final = extract_predicates_with_adjacency(scene, franka, blocks_state)
 
 if not phase1_goal.issubset(phase1_final):
@@ -342,26 +317,20 @@ for block in phase1_blocks:
     pos = blocks_state[block].get_pos()
     print(f"  {block}: ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})")
 
-print("\n" + "=" * 80)
 print("PHASE 2: STACKING")
-print("=" * 80)
 print("\nGoal: Stack r3 on r1, g3 on g2")
 
 phase2_goal = {
     # Base blocks still on table
     "ONTABLE(r1)", "ONTABLE(g1)", "ONTABLE(r2)", "ONTABLE(g2)",
-    
     # Base adjacency preserved
     "ADJACENT-X(g1,r1)", "ADJACENT-X(g2,r2)",
     "ADJACENT-Y(r1,r2)", "ADJACENT-Y(g1,g2)",
-    
     # Stacking goals
     "ON(r3,r1)", "ON(g3,g1)",
-    
     # Only the TOP blocks need to be clear
     "CLEAR(r3)", "CLEAR(g3)",
     "CLEAR(r2)", "CLEAR(g2)",  # These aren't stacked on
-    
     # Hand empty
     "HANDEMPTY()",
 }
@@ -373,9 +342,7 @@ replan_attempt = 0
 while replan_attempt < MAX_REPLAN_ATTEMPTS:
     replan_attempt += 1
     
-    print(f"\n{'=' * 80}")
     print(f"PHASE 2 - ATTEMPT {replan_attempt}")
-    print(f"{'=' * 80}")
 
     current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
     
@@ -387,7 +354,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         break
 
     # PLANNING
-    print("\n[Planning] Generating complete plan for Phase 2...")
+    print("\nPlanning: Generating complete plan for Phase 2")
     
     problem_string = generate_pddl_problem_sp2(
         current_predicates,
@@ -408,26 +375,18 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         print("No plan found for Phase 2!")
         break
 
-    print(f"\n✓ Complete plan generated with {len(plan)} actions")
-    print("\n" + "="*60)
+    print(f"\nComplete plan generated with {len(plan)} actions")
     print("PHASE 2 COMPLETE PLAN:")
-    print("="*60)
     print(plan_to_string(plan))
-    print("="*60)
     
     # EXECUTION
-    print(f"\n[Execution] Executing complete plan ({len(plan)} actions)...")
-    print("Note: No replanning between actions!")
-    
+    print(f"\nExecution: Executing complete plan ({len(plan)} actions)")    
     plan_success = True
     
     for action_idx, (action_name, args) in enumerate(plan, 1):
-        print(f"\n{'─' * 60}")
         print(f"ACTION {action_idx}/{len(plan)}: {action_name.upper()}({', '.join(args)})")
-        print(f"{'─' * 60}")
 
         success = False
-
         if action_name == "pick-up":
             block_id = args[0]
             print(f"  → Picking up block '{block_id}'")
@@ -442,36 +401,36 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
                 success = executor.pick_up(block_id)
 
         elif action_name == "put-down":
-            print(f"  → Putting down held block")
+            print(f"Putting down held block")
             success = executor.put_down()
         
         elif action_name == "put-down-adjacent-x":
             block_id = args[0]
             adjacent_to = args[1]
-            print(f"  → Placing '{block_id}' to RIGHT of '{adjacent_to}' (+X direction)")
+            print(f"Placing '{block_id}' to RIGHT of '{adjacent_to}' (+X direction)")
             success = executor.put_down_adjacent_x(adjacent_to, direction="+x")
         
         elif action_name == "put-down-adjacent-y":
             block_id = args[0]
             adjacent_to = args[1]
-            print(f"  → Placing '{block_id}' in FRONT of '{adjacent_to}' (+Y direction)")
+            print(f"Placing '{block_id}' in FRONT of '{adjacent_to}' (+Y direction)")
             success = executor.put_down_adjacent_y(adjacent_to, direction="+y")
 
         elif action_name == "stack":
             block_id = args[0]
             target_id = args[1]
-            print(f"  → Stacking '{block_id}' on '{target_id}'")
+            print(f"Stacking '{block_id}' on '{target_id}'")
             
             adjacent = get_adjacent_blocks_info(target_id, blocks_state)
             if adjacent:
-                print(f" Blocks around target '{target_id}': {adjacent}")
+                print(f"Blocks around target '{target_id}': {adjacent}")
             
             success = executor.stack_on(target_id, current_predicates)
 
         elif action_name == "unstack":
             block_id = args[0]
             from_id = args[1]
-            print(f"  → Unstacking '{block_id}' from '{from_id}'")
+            print(f"Unstacking '{block_id}' from '{from_id}'")
             
             adjacent = get_adjacent_blocks_info(block_id, blocks_state)
             if adjacent:
@@ -498,7 +457,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
         for _ in range(100):
             scene.step()
         
-        # **NEW: Check if goal already satisfied after this action**
+        #Check if goal already satisfied after this action
         current_predicates = extract_predicates_with_adjacency(scene, franka, blocks_state)
         if phase2_goal.issubset(current_predicates):
             print(f"\nGOAL ACHIEVED after action {action_idx}/{len(plan)}! Skipping remaining actions.")
@@ -508,9 +467,7 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             scene.step()
     
     # CHECK GOAL
-    print("\n" + "=" * 60)
-    print("PHASE 2: Checking goal satisfaction...")
-    print("=" * 60)
+    print("PHASE 2: Checking goal satisfaction")
     
     for _ in range(100):
         scene.step()
@@ -528,19 +485,13 @@ while replan_attempt < MAX_REPLAN_ATTEMPTS:
             print(f"  {p}")
         
         if replan_attempt < MAX_REPLAN_ATTEMPTS:
-            print(f"\n Replanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})...")
+            print(f"\n Replanning (attempt {replan_attempt + 1}/{MAX_REPLAN_ATTEMPTS})")
         else:
             print("\nMax replan attempts reached")
             break
 
 
-# ============================================================================
-# FINAL VERIFICATION
-# ============================================================================
-
-print("\n" + "=" * 80)
-print("FINAL VERIFICATION")
-print("=" * 80)
+#FINAL VERIFICATION
 
 for _ in range(100):
     scene.step()
@@ -550,26 +501,17 @@ print("\nFinal State:")
 print_predicates_sp2(final_predicates)
 
 if phase2_goal.issubset(final_predicates):
-    print("=" * 80)
-    print("SUCCESS! DIRECTIONAL ADJACENCY TAMP COMPLETE!")
-    print("=" * 80)
-    print("\nFinal structure:")
-    print("  [r3] [g3]         ← Top layer (stacked)")
-    print("  [r1][g1]          ← Bottom layer")
-    print("  [r2][g2]          ← Bottom layer")
-    print("\nAll blocks positioned correctly with precise directional placement!")
+    print("Goal Achived")
 else:
-    print("=" * 80)
-    print("GOAL NOT ACHIEVED")
-    print("=" * 80)
+    print("Goal not achived")
     print("\nMissing predicates:")
     missing = phase2_goal - final_predicates
     for p in sorted(missing):
         print(f"  {p}")
 
-print("\nViewing final result. Press Ctrl+C to exit...")
+print("\nCtrl+C to exit")
 try:
     while True:
         scene.step()
 except KeyboardInterrupt:
-    print("\nExiting...")
+    print("\nExiting Simulation")
