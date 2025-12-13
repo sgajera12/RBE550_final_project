@@ -92,10 +92,10 @@ python3 goal2_stacked.py       # From pre-stacked start
 python3 goal3_tallest.py
 ```
 
-**Goal 4 - Pentagon Structure**:
+**Goal 4 - Pentagon Structure and grid blocks**:
 ```bash
 python3 goal4_task1.py        # Two-layer pentagon
-python3 goal4_task2.py        # (if implemented)
+python3 goal4_task2.py        # grid blocks
 ```
 
 **Note for Goal 4**: If you see "OMPL start state out of bounds" error on first run:
@@ -200,19 +200,6 @@ code/
    - Let physics settle
 4. Verify goal achieved
 ```
-
----
-
-## Goals Description
-
-| Goal | Description | Key Challenge |
-|------|-------------|---------------|
-| **Goal 1** | Stack 5 blocks in specific order | Minimize pick-and-place moves |
-| **Goal 2** | Build two separate towers | Parallel sub-goals, workspace management |
-| **Goal 3** | Build tallest stable tower | Balance height vs stability |
-| **Goal 4** | Two-layer pentagon structure | Precise geometric positioning |
-
----
 
 ## Additional Help
 
